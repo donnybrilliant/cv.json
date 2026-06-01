@@ -1,0 +1,91 @@
+{
+  "personalInfo": {
+    "name": "Alex Eksempel",
+    "titles": ["Programvareutvikler", "Fullstack-utvikler"],
+    "bio": "Eksempel-CV for CV-editoren. Erstatt denne teksten med din egen oppsummering. Live-dokumenter lagres lokalt i data/ og committes ikke til git.",
+    "contact": {
+      "email": "deg@eksempel.no",
+      "phone": "+47 400 00 000",
+      "locations": [
+        {
+          "city": "Eksempelby",
+          "country": "Norge",
+          "mapUrl": "https://www.google.com/maps"
+        }
+      ],
+      "website": "https://eksempel.no",
+      "github": "https://github.com/eksempel",
+      "linkedin": "https://www.linkedin.com/in/eksempel/"
+    }
+  },
+  "education": [
+    {
+      "degree": "B.Sc. Informatikk",
+      "institution": "Eksempeluniversitetet",
+      "year": "2018 – 2022"
+    },
+    {
+      "degree": "Webutviklingskurs",
+      "institution": "Eksempel Akademi",
+      "year": "2023"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "HTML",
+    "CSS",
+    "Git",
+    "REST API",
+    "SQL",
+    "Testing"
+  ],
+  "certifications": [
+    {
+      "name": "Eksempel-sertifisering",
+      "provider": "Eksempel Org",
+      "hours": "40 timer",
+      "url": "https://eksempel.no/sert"
+    }
+  ],
+  "languages": [
+    { "language": "Norsk", "level": "Morsmål" },
+    { "language": "Engelsk", "level": "Flytende" }
+  ],
+  "experience": [
+    {
+      "company": "Eksempel AS",
+      "position": "Programvareutvikler",
+      "period": "2022 – Nå",
+      "type": "Heltid",
+      "responsibilities": [
+        "Utviklet og vedlikeholdt kundevendte webapplikasjoner.",
+        "Samarbeidet med design og produkt om nye funksjoner.",
+        "Forbedret ytelse og testdekning."
+      ]
+    },
+    {
+      "company": "Startup Labs",
+      "position": "Juniorutvikler",
+      "period": "2020 – 2022",
+      "type": "Heltid",
+      "responsibilities": [
+        "Leverte MVP-funksjoner i et lite smidig team.",
+        "Integrerte tredjeparts-API-er og betalingsløsninger."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Porteføljeside",
+      "description": "Personlig nettside bygget med React og Vite.",
+      "url": "https://eksempel.no",
+      "period": "2024",
+      "tags": ["React", "Vite", "Tailwind"]
+    }
+  ],
+  "theme": { "color": "blue" },
+  "hiddenSections": []
+}

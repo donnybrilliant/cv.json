@@ -1,0 +1,91 @@
+{
+  "personalInfo": {
+    "name": "Alex Example",
+    "titles": ["Software Developer", "Full-stack Engineer"],
+    "bio": "Sample CV for the CV editor demo. Replace this text with your own summary. Live documents are stored in data/ on your machine and are not committed to git.",
+    "contact": {
+      "email": "you@example.com",
+      "phone": "+1 555 0100",
+      "locations": [
+        {
+          "city": "Example City",
+          "country": "Country",
+          "mapUrl": "https://www.google.com/maps"
+        }
+      ],
+      "website": "https://example.com",
+      "github": "https://github.com/example",
+      "linkedin": "https://www.linkedin.com/in/example/"
+    }
+  },
+  "education": [
+    {
+      "degree": "B.Sc. Computer Science",
+      "institution": "Example University",
+      "year": "2018 – 2022"
+    },
+    {
+      "degree": "Web Development Bootcamp",
+      "institution": "Example Academy",
+      "year": "2023"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "HTML",
+    "CSS",
+    "Git",
+    "REST APIs",
+    "SQL",
+    "Testing"
+  ],
+  "certifications": [
+    {
+      "name": "Example Certification",
+      "provider": "Example Org",
+      "hours": "40 hours",
+      "url": "https://example.com/cert"
+    }
+  ],
+  "languages": [
+    { "language": "English", "level": "Native" },
+    { "language": "Spanish", "level": "Conversational" }
+  ],
+  "experience": [
+    {
+      "company": "Example Corp",
+      "position": "Software Engineer",
+      "period": "2022 – Present",
+      "type": "Full-time",
+      "responsibilities": [
+        "Built and maintained customer-facing web applications.",
+        "Collaborated with design and product on new features.",
+        "Improved performance and test coverage."
+      ]
+    },
+    {
+      "company": "Startup Labs",
+      "position": "Junior Developer",
+      "period": "2020 – 2022",
+      "type": "Full-time",
+      "responsibilities": [
+        "Shipped MVP features in a small agile team.",
+        "Integrated third-party APIs and payment flows."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Portfolio Site",
+      "description": "Personal site built with React and Vite.",
+      "url": "https://example.com",
+      "period": "2024",
+      "tags": ["React", "Vite", "Tailwind"]
+    }
+  ],
+  "theme": { "color": "blue" },
+  "hiddenSections": []
+}

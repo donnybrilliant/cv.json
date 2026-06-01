@@ -1,0 +1,91 @@
+{
+  "personalInfo": {
+    "name": "Alex Ejemplo",
+    "titles": ["Desarrollador de software", "Ingeniero full-stack"],
+    "bio": "CV de ejemplo para el editor. Sustituye este texto por tu propio resumen. Los documentos en vivo se guardan en data/ en tu máquina y no se suben a git.",
+    "contact": {
+      "email": "tu@ejemplo.com",
+      "phone": "+34 600 00 00 00",
+      "locations": [
+        {
+          "city": "Ciudad Ejemplo",
+          "country": "España",
+          "mapUrl": "https://www.google.com/maps"
+        }
+      ],
+      "website": "https://ejemplo.com",
+      "github": "https://github.com/ejemplo",
+      "linkedin": "https://www.linkedin.com/in/ejemplo/"
+    }
+  },
+  "education": [
+    {
+      "degree": "Grado en Informática",
+      "institution": "Universidad Ejemplo",
+      "year": "2018 – 2022"
+    },
+    {
+      "degree": "Bootcamp de desarrollo web",
+      "institution": "Academia Ejemplo",
+      "year": "2023"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "HTML",
+    "CSS",
+    "Git",
+    "API REST",
+    "SQL",
+    "Pruebas"
+  ],
+  "certifications": [
+    {
+      "name": "Certificación de ejemplo",
+      "provider": "Organización Ejemplo",
+      "hours": "40 horas",
+      "url": "https://ejemplo.com/cert"
+    }
+  ],
+  "languages": [
+    { "language": "Español", "level": "Nativo" },
+    { "language": "Inglés", "level": "Fluido" }
+  ],
+  "experience": [
+    {
+      "company": "Empresa Ejemplo",
+      "position": "Ingeniero de software",
+      "period": "2022 – Actualidad",
+      "type": "Tiempo completo",
+      "responsibilities": [
+        "Desarrollé y mantuve aplicaciones web orientadas al cliente.",
+        "Colaboré con diseño y producto en nuevas funciones.",
+        "Mejoré el rendimiento y la cobertura de pruebas."
+      ]
+    },
+    {
+      "company": "Startup Labs",
+      "position": "Desarrollador junior",
+      "period": "2020 – 2022",
+      "type": "Tiempo completo",
+      "responsibilities": [
+        "Entregué funciones MVP en un equipo ágil pequeño.",
+        "Integré APIs de terceros y flujos de pago."
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Sitio portfolio",
+      "description": "Sitio personal con React y Vite.",
+      "url": "https://ejemplo.com",
+      "period": "2024",
+      "tags": ["React", "Vite", "Tailwind"]
+    }
+  ],
+  "theme": { "color": "blue" },
+  "hiddenSections": []
+}

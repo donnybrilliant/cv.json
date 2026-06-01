@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.env
+*.idea
+
+# Local editor persistence at repo root (live CV, versions, avatar) — never commit
+/data/
+
+# Seed CV JSON in public/data/ is tracked (not matched by /data/ above)
+
+# Personal photos in assets (only src/assets/avatar.svg is published)
+src/assets/profile.png
+src/assets/profile.jpeg
+
+# Local Netlify folder
+.netlify
+.vscode/
