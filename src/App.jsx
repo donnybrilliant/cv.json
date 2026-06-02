@@ -6,6 +6,7 @@ import Toolbar from "./components/Toolbar";
 import Sidebar from "./components/Sidebar";
 import Experience from "./components/Experience";
 import Projects from "./components/Projects";
+import CustomSections from "./components/CustomSections";
 import Editable from "./components/Editable";
 
 const uiLabels = {
@@ -149,6 +150,7 @@ export default function App() {
             <Header />
             <Experience labels={labels} />
             <Projects labels={labels} />
+            <CustomSections zone="main" />
           </div>
         </div>
       </div>

@@ -10,6 +10,7 @@ import { buildCustomTheme, CUSTOM_THEME, DEFAULT_THEME } from "../themes";
 function normalizeDoc(doc) {
   if (!doc || typeof doc !== "object") return doc;
   if (!Array.isArray(doc.projects)) doc.projects = [];
+  if (!Array.isArray(doc.customSections)) doc.customSections = [];
   if (!Array.isArray(doc.hiddenSections)) doc.hiddenSections = [];
   if (!doc.theme || typeof doc.theme !== "object") doc.theme = { color: DEFAULT_THEME };
   if (!doc.theme.color) doc.theme.color = DEFAULT_THEME;
@@ -171,6 +172,28 @@ export const useCvStore = create()(
           const i = hidden.indexOf(key);
           if (i === -1) hidden.push(key);
           else hidden.splice(i, 1);
+        }),
+
+      // --- custom sections (flexible, user-defined sections with an editable
+      // title, pickable icon, and a flat list of rich entries) ---
+      addCustomSection: (placement) =>
+        set((d) => {
+          d.doc.customSections.push({
+            id: `cs-${crypto.randomUUID()}`,
+            icon: "link",
+            title: "New section",
+            placement,
+            items: [],
+          });
+        }),
+
+      // Remove a section and drop any leftover visibility entry for its id.
+      removeCustomSection: (index) =>
+        set((d) => {
+          const [removed] = d.doc.customSections.splice(index, 1);
+          if (!removed) return;
+          const i = d.doc.hiddenSections.indexOf(removed.id);
+          if (i !== -1) d.doc.hiddenSections.splice(i, 1);
         }),
 
       // --- theme (per-CV, stored in the document) ---

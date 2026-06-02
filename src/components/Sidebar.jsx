@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import {
   Mail,
   Phone,
@@ -18,10 +18,12 @@ import {
 import avatarFallback from "../assets/avatar.svg";
 import { useCvStore } from "../store/cvStore";
 import { avatarUrl } from "../api/client";
-import { LinkIcon, resolveLink, ICON_PICKER_KEYS } from "../lib/linkPresets";
+import { LinkIcon, resolveLink } from "../lib/linkPresets";
 import Editable from "./Editable";
+import IconPicker from "./IconPicker";
 import RowControls from "./RowControls";
 import Section from "./Section";
+import CustomSections from "./CustomSections";
 import { SortableList, SortableItem } from "./Sortable";
 
 const ICON = "text-[var(--cv-icon)]";
@@ -47,59 +49,6 @@ function AddButton({ onClick, label }) {
     >
       <Plus className="w-3.5 h-3.5" /> {label}
     </button>
-  );
-}
-
-// Click the current icon to override it (or reset to auto-detect).
-function IconPicker({ iconKey, onPick }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-  return (
-    <span className="relative" ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title="Change icon"
-        className="shrink-0 p-0.5 rounded hover:bg-black/5 cursor-pointer print:hidden"
-      >
-        <LinkIcon iconKey={iconKey} className={`w-4 h-4 ${ICON}`} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-7 z-50 p-2 bg-white rounded-lg shadow-xl ring-1 ring-gray-200 grid grid-cols-6 gap-1 w-44">
-          {ICON_PICKER_KEYS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              title={k}
-              onClick={() => {
-                onPick(k);
-                setOpen(false);
-              }}
-              className={`p-1 rounded hover:bg-gray-100 cursor-pointer ${k === iconKey ? "bg-gray-100 text-gray-900" : "text-gray-600"}`}
-            >
-              <LinkIcon iconKey={k} className="w-4 h-4" />
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              onPick("");
-              setOpen(false);
-            }}
-            className="col-span-6 mt-1 text-xs text-gray-500 hover:text-gray-800 cursor-pointer"
-          >
-            Auto-detect from URL
-          </button>
-        </div>
-      )}
-    </span>
   );
 }
 
@@ -414,6 +363,9 @@ export default function Sidebar({ labels }) {
           </SortableList>
           <AddButton label="Add language" onClick={() => addItem(["languages"], { language: "Language", level: "Level" })} />
         </Section>
+
+        {/* User-defined flexible sections placed in the sidebar */}
+        <CustomSections zone="sidebar" />
       </div>
     </div>
   );
