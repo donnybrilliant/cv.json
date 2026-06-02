@@ -12,7 +12,7 @@ export default function Section({ sectionKey, icon: Icon, title, children }) {
   if (!editMode && hidden) return null;
 
   return (
-    <div className={hidden ? "opacity-40" : ""}>
+    <div className={hidden ? "opacity-40 print:hidden" : ""}>
       <div className="flex items-center gap-2 font-bold text-lg mb-4 pb-2 border-b">
         <Icon className="w-5 h-5 text-[var(--cv-icon)]" />
         <span>{title}</span>

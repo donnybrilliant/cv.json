@@ -12,6 +12,8 @@ import {
   Plus,
   Camera,
   Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import avatarFallback from "../assets/avatar.svg";
 import { useCvStore } from "../store/cvStore";
@@ -182,8 +184,11 @@ function ContactLinkRow({ index, link }) {
 function Avatar({ name }) {
   const editMode = useCvStore((s) => s.editMode);
   const avatarVersion = useCvStore((s) => s.avatarVersion);
+  const avatarExists = useCvStore((s) => s.avatarExists);
   const uploadAvatar = useCvStore((s) => s.uploadAvatar);
   const deleteAvatar = useCvStore((s) => s.deleteAvatar);
+  const hidden = useCvStore((s) => s.doc.hiddenSections?.includes("profilePicture"));
+  const toggleSection = useCvStore((s) => s.toggleSection);
   const fileRef = useRef(null);
 
   const onPick = async (e) => {
@@ -195,8 +200,10 @@ function Avatar({ name }) {
     e.target.value = "";
   };
 
+  if (!editMode && hidden) return null;
+
   return (
-    <div className="max-w-48 mx-auto my-11 relative group/avatar">
+    <div className={`max-w-48 mx-auto my-11 relative group/avatar ${hidden ? "opacity-40 print:hidden" : ""}`}>
       <img
         key={avatarVersion}
         src={avatarUrl(avatarVersion)}
@@ -213,8 +220,19 @@ function Avatar({ name }) {
           <button onClick={() => fileRef.current?.click()} className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer" title="Upload photo">
             <Camera className="w-5 h-5" />
           </button>
-          <button onClick={() => deleteAvatar()} className="p-2 rounded-full bg-white/90 text-gray-700 hover:text-red-600 hover:bg-white cursor-pointer" title="Remove photo">
-            <Trash2 className="w-5 h-5" />
+          {avatarExists && (
+            <button onClick={() => deleteAvatar()} className="p-2 rounded-full bg-white/90 text-gray-700 hover:text-red-600 hover:bg-white cursor-pointer" title="Remove photo">
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => toggleSection("profilePicture")}
+            className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer"
+            title={hidden ? "Show profile picture (will appear in PDF)" : "Hide profile picture from Print/PDF"}
+            aria-label={hidden ? "Show profile picture" : "Hide profile picture"}
+          >
+            {hidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPick} />
         </div>

@@ -214,6 +214,7 @@ export default function Toolbar({ labels }) {
   const setEditMode = useCvStore((s) => s.setEditMode);
   const doc = useCvStore((s) => s.doc);
   const [exporting, setExporting] = useState(false);
+  const [maskPdfExport, setMaskPdfExport] = useState(false);
 
   const { undo, redo, pastStates, futureStates } = useStore(
     useCvStore.temporal,
@@ -265,13 +266,27 @@ export default function Toolbar({ labels }) {
 
   // Download a cropped, compressed PDF. Capture in view mode so no edit chrome
   // (and no hidden sections) end up in the file, then restore the prior mode.
+  // The full-screen overlay (z-50) paints first so the mode switch underneath
+  // it is never visible — no toolbar or image flash.
   const onPdf = async () => {
+    const node = document.getElementById("cv-root");
+    if (!node) return;
     const wasEdit = editMode;
+
+    // Only mask the UI when exporting from edit mode (where mode-switch flashes
+    // can happen). View mode exports remain seamless with no overlay.
+    setMaskPdfExport(wasEdit);
     setExporting(true);
+    if (wasEdit) {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+
     if (wasEdit) setEditMode(false);
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (wasEdit) {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+
     try {
-      const node = document.getElementById("cv-root");
       const name = (doc?.personalInfo?.name || "CV").trim();
       await exportNodeToPdf(node, `CV - ${name} - ${lang.toUpperCase()}.pdf`);
     } catch (err) {
@@ -279,6 +294,7 @@ export default function Toolbar({ labels }) {
       alert("PDF export failed — see console for details.");
     } finally {
       if (wasEdit) setEditMode(true);
+      setMaskPdfExport(false);
       setExporting(false);
     }
   };
@@ -292,6 +308,19 @@ export default function Toolbar({ labels }) {
     "p-2 rounded bg-white text-gray-700 shadow hover:bg-gray-50 disabled:opacity-30 disabled:cursor-default cursor-pointer";
 
   return (
+    <>
+    {exporting && maskPdfExport && (
+      <div
+        className="fixed inset-0 z-50 bg-white flex items-center justify-center print:hidden"
+        aria-live="polite"
+        aria-label="Generating PDF"
+      >
+        <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-lg text-sm text-gray-700 ring-1 ring-gray-200">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Generating PDF…
+        </div>
+      </div>
+    )}
     <div className="fixed top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 print:hidden z-40">
       {/* Left side: edit-only controls. These appear/disappear here so the
           static group on the right (toggle, languages, print) never moves. */}
@@ -380,5 +409,6 @@ export default function Toolbar({ labels }) {
         <Printer className="w-5 h-5" />
       </button>
     </div>
+    </>
   );
 }
