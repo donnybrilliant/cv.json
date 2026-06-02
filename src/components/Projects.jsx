@@ -15,7 +15,7 @@ function Tags({ projectIndex, tags }) {
   return (
     <div className="flex flex-wrap gap-1.5 mt-1">
       {tags.map((tag, ti) => (
-        <span key={ti} className="text-xs bg-[var(--cv-bg)] px-2 py-0.5 rounded">
+        <span key={ti} className="text-xs bg-[var(--cv-chip-bg)] px-2 py-0.5 rounded">
           {editMode ? (
             <Editable inline value={tag} onChange={(v) => setField(["projects", projectIndex, "tags", ti], v)} />
           ) : (

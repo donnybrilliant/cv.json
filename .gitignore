@@ -27,6 +27,7 @@ dist-ssr
 
 # Local editor persistence at repo root (live CV, versions, avatar) — never commit
 /data/
+/backup/
 
 # Seed CV JSON in public/data/ is tracked (not matched by /data/ above)
 

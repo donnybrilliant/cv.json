@@ -81,7 +81,7 @@ function Header() {
       {editMode && (
         <div className="mb-4 flex flex-wrap gap-2 print:hidden">
           {titles.map((t, i) => (
-            <span key={i} className="relative text-sm bg-[var(--cv-bg)] px-2 py-1 rounded flex items-center gap-1">
+            <span key={i} className="relative text-sm bg-[var(--cv-chip-bg)] px-2 py-1 rounded flex items-center gap-1">
               <Editable inline value={t} onChange={(v) => setField(["personalInfo", "titles", i], v)} />
               <button
                 onClick={() => removeItem(["personalInfo", "titles"], i)}

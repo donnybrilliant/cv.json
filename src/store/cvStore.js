@@ -13,7 +13,6 @@ function normalizeDoc(doc) {
   if (!Array.isArray(doc.hiddenSections)) doc.hiddenSections = [];
   if (!doc.theme || typeof doc.theme !== "object") doc.theme = { color: DEFAULT_THEME };
   if (!doc.theme.color) doc.theme.color = DEFAULT_THEME;
-  if (doc.theme.color === "teal") doc.theme.color = "cyan";
   if (doc.theme.color === CUSTOM_THEME && !doc.theme.custom) {
     doc.theme.color = DEFAULT_THEME;
   }
@@ -78,6 +77,15 @@ export const useCvStore = create()(
       saveState: "idle", // idle | saving | saved | error
       loading: true,
       avatarVersion: 0, // bumped after avatar upload to bust the image cache (UI-only)
+      avatarExists: false,
+      aiStatus: "idle", // idle | tailoring | error (UI-only)
+      aiError: null,
+
+      clearAiState: () =>
+        set((d) => {
+          d.aiStatus = "idle";
+          d.aiError = null;
+        }),
 
       setSaveState: (s) =>
         set((d) => {
@@ -106,6 +114,16 @@ export const useCvStore = create()(
           d.lang = lang;
           d.loading = false;
         });
+        try {
+          const meta = await api.avatarExists();
+          set((d) => {
+            d.avatarExists = Boolean(meta?.exists);
+          });
+        } catch {
+          set((d) => {
+            d.avatarExists = false;
+          });
+        }
         useCvStore.temporal.getState().clear(); // fresh history per doc
         suppressSave = false;
       },
@@ -175,12 +193,14 @@ export const useCvStore = create()(
         await api.uploadAvatar(dataUrl);
         set((d) => {
           d.avatarVersion += 1;
+          d.avatarExists = true;
         });
       },
       deleteAvatar: async () => {
         await api.deleteAvatar();
         set((d) => {
           d.avatarVersion += 1;
+          d.avatarExists = false;
         });
       },
 
@@ -193,6 +213,33 @@ export const useCvStore = create()(
         const { lang } = get();
         const doc = await api.getVersion(name, lang);
         get().replaceDoc(doc); // undoable
+      },
+
+      // --- AI: tailor the whole CV to a job posting ---
+      // Applies immediately (per design); a safety snapshot is saved first and
+      // the change is undoable via ⌘Z. `job` is { text } or { url }.
+      aiTailor: async (job) => {
+        set((d) => {
+          d.aiStatus = "tailoring";
+          d.aiError = null;
+        });
+        try {
+          const { lang, doc } = get();
+          const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+          // Best-effort safety net; don't block tailoring if it fails.
+          await api.createVersion(`before-tailor-${stamp}`, lang, doc).catch(() => {});
+          const tailored = await api.tailorCv(lang, doc, job);
+          get().replaceDoc(tailored); // undoable + autosaves to disk
+          set((d) => {
+            d.aiStatus = "idle";
+          });
+        } catch (e) {
+          set((d) => {
+            d.aiStatus = "error";
+            d.aiError = String(e?.message || e);
+          });
+          throw e;
+        }
       },
     })),
     {

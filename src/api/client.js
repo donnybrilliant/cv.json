@@ -30,6 +30,38 @@ export const deleteVersion = (name, lang) =>
     method: "DELETE",
   }).then(json);
 
+// AI: tailor the whole CV to a job posting. `job` is { text } or { url }.
+// Returns a new tailored document (same shape as the current doc).
+export const tailorCv = (lang, doc, job) =>
+  fetch("/api/ai/tailor", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lang, doc, job }),
+  }).then(json);
+
+// AI: stream a cover letter. Calls `onChunk(textSoFar)` as text arrives and
+// resolves with the full letter. `job` is { text } or { url }.
+export const coverLetter = async (lang, doc, job, tone, onChunk) => {
+  const res = await fetch("/api/ai/cover-letter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lang, doc, job, tone }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let full = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    full += decoder.decode(value, { stream: true });
+    onChunk?.(full);
+  }
+  full += decoder.decode();
+  onChunk?.(full);
+  return full;
+};
+
 // Avatar: a single shared image file. `dataUrl` is a base64 data URL.
 export const uploadAvatar = (dataUrl) =>
   fetch("/api/avatar", {
@@ -38,7 +70,8 @@ export const uploadAvatar = (dataUrl) =>
     body: JSON.stringify({ dataUrl }),
   }).then(json);
 
-export const deleteAvatar = () => fetch("/api/avatar", { method: "DELETE" }).then(json);
+export const deleteAvatar = () =>
+  fetch("/api/avatar", { method: "DELETE" }).then(json);
 
 // URL for the current avatar; `v` busts the browser cache after a change.
 export const avatarUrl = (v) => `/api/avatar?v=${v}`;

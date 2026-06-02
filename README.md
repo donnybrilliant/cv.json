@@ -52,6 +52,33 @@ static deploy to GitHub Pages / Netlify without adding your own backend.
 - **PDF** — the _PDF_ button downloads a single-page, content-cropped,
   JPEG-compressed PDF. The printer button (`⌘P`) is the browser-print route.
 - **Languages** — NO / EN / ES, each its own file, edited independently.
+- **Tailor to a job** — in edit mode, the _Tailor_ button opens a panel where you
+  paste a job description (text or a URL) and let an AI **rewrite your CV for that
+  role** and **draft a cover letter**. Tailoring rewrites your summary, reorders
+  skills, and rephrases experience bullets using only facts already in your CV —
+  it never invents employers, dates, or skills, and never touches your contact
+  details, theme, or hidden sections. It applies in place and is undoable (`⌘Z`),
+  and a `before-tailor-…` snapshot is saved first as a safety net. The cover
+  letter streams in and can be copied or downloaded as `.md` (it is not stored in
+  the CV). See [AI setup](#ai-setup) below.
+
+## AI setup
+
+The tailoring feature is **optional** and runs through the same local Node
+middleware as the rest of the app, so your API key stays on your machine and
+never reaches the browser. It uses the [Vercel AI SDK](https://sdk.vercel.ai/)
+with [OpenRouter](https://openrouter.ai/) — one key, many models.
+
+```bash
+cp .env.example .env
+# then edit .env and add your OPENROUTER_API_KEY (and optionally OPENROUTER_MODEL)
+```
+
+Restart `npm run dev` after editing `.env`. The model is chosen with
+`OPENROUTER_MODEL` (e.g. `openai/gpt-4o-mini`, `anthropic/claude-3.7-sonnet`,
+`google/gemini-2.0-flash`). Pasting a job **URL** works for simple, server-rendered
+postings; JS-heavy boards (LinkedIn and some Workday/Greenhouse pages) may not
+extract cleanly — paste the description text instead.
 
 ## Data & backups
 
@@ -75,7 +102,9 @@ as usual — nothing personal is pushed to GitHub.
 
 Vite + React 19 + Tailwind v4. State and undo/redo via `zustand` + `zundo`,
 nested edits via `immer`, file persistence via `lowdb`, drag-to-reorder via
-`@dnd-kit`, and client-side PDF via `html-to-image` + `jspdf`.
+`@dnd-kit`, and client-side PDF via `html-to-image` + `jspdf`. Optional AI
+tailoring uses the Vercel AI SDK (`ai`) via OpenRouter, with `zod`-validated
+structured output.
 
 ## License
 

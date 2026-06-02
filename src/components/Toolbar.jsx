@@ -20,8 +20,9 @@ import {
 } from "lucide-react";
 import { useCvStore } from "../store/cvStore";
 import * as api from "../api/client";
-import { CUSTOM_THEME, THEMES, THEME_KEYS, themeIconColor } from "../themes";
+import { CUSTOM_THEME, THEMES, THEME_KEYS, isLightColor, themeIconColor } from "../themes";
 import { exportNodeToPdf } from "../lib/exportPdf";
+import JobTailor from "./JobTailor";
 
 const LANGUAGES = ["no", "en", "es"];
 
@@ -45,7 +46,8 @@ function ThemePicker() {
 
   const swatch = themeIconColor(theme);
   const isCustom = color === CUSTOM_THEME;
-  const customHex = theme?.custom?.icon || "#2563eb";
+  const customHex = theme?.custom?.picked || theme?.custom?.icon || "#2563eb";
+  const customPlusClass = isLightColor(customHex) ? "text-gray-700" : "text-white drop-shadow";
 
   return (
     <div className="relative" ref={ref}>
@@ -81,7 +83,7 @@ function ThemePicker() {
             style={isCustom ? { background: customHex } : undefined}
             aria-label="Custom color"
           >
-            {!isCustom && <Plus className="w-4 h-4 text-gray-500" strokeWidth={2.5} />}
+            <Plus className={`w-4 h-4 ${isCustom ? customPlusClass : "text-gray-500"}`} strokeWidth={2.5} />
           </button>
           <input
             ref={colorInputRef}
@@ -311,6 +313,8 @@ export default function Toolbar({ labels }) {
           </button>
 
           <VersionsMenu />
+
+          <JobTailor />
 
           <ThemePicker />
 

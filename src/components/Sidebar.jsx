@@ -322,7 +322,7 @@ export default function Sidebar({ labels }) {
           <SortableList ids={skillIds} layout="grid" onReorder={(f, t) => moveItem(["skills"], f, t)}>
             <div className="flex flex-wrap gap-2">
               {skills.map((skill, i) => (
-                <SortableItem key={skillIds[i]} id={skillIds[i]} as="span" dragWholeItem className="text-sm bg-white/60 px-2 py-1 rounded inline-flex items-center">
+                <SortableItem key={skillIds[i]} id={skillIds[i]} as="span" dragWholeItem className="text-sm bg-[var(--cv-chip-bg)] px-2 py-1 rounded inline-flex items-center">
                   {editMode ? (
                     <Editable inline value={skill} onChange={(v) => setField(["skills", i], v)} />
                   ) : (
