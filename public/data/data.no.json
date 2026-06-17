@@ -5,7 +5,7 @@
     "bio": "Eksempel-CV for CV-editoren. Erstatt denne teksten med din egen oppsummering. Live-dokumenter lagres lokalt i data/ og committes ikke til git.",
     "contact": {
       "email": "deg@eksempel.no",
-      "phone": "+47 400 00 000",
+      "phones": ["+47 400 00 000"],
       "locations": [
         {
           "city": "Eksempelby",

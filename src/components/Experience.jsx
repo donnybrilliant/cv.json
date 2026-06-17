@@ -19,6 +19,30 @@ function AddButton({ onClick, label, className = "" }) {
   );
 }
 
+function newRole() {
+  return { title: "Role title", period: "Period", type: "", responsibilities: ["New responsibility"] };
+}
+
+function convertExperienceToRoles(exp) {
+  const { responsibilities, ...parent } = exp;
+  const firstRole = {
+    title: exp.position || "Role title",
+    period: exp.period || exp.periods?.[0]?.period || "Period",
+    type: exp.type || exp.periods?.[0]?.type || "",
+    responsibilities: responsibilities?.length ? responsibilities : ["New responsibility"],
+  };
+
+  return {
+    ...parent,
+    position: "Multiple roles",
+    roles: [firstRole, newRole()],
+  };
+}
+
+function hasText(value) {
+  return String(value || "").trim().length > 0;
+}
+
 // Editable, sortable list of responsibility bullets at the given store path.
 function Responsibilities({ path, items }) {
   const editMode = useCvStore((s) => s.editMode);
@@ -75,6 +99,12 @@ export default function Experience({ labels }) {
       <SortableList ids={expIds} onReorder={(f, t) => moveItem(["experience"], f, t)}>
         {experience.map((exp, i) => {
           const roleIds = (exp.roles || []).map((_, ri) => `role-${ri}`);
+          const showEmptyParentMeta = editMode;
+          const showCompany = hasText(exp.company) || showEmptyParentMeta;
+          const visiblePeriods = (exp.periods || []).filter((p) => hasText(p.period) || hasText(p.type) || showEmptyParentMeta);
+          const showSinglePeriod = !exp.periods && (hasText(exp.period) || showEmptyParentMeta);
+          const showSingleType = !exp.periods && (hasText(exp.type) || showEmptyParentMeta);
+          const hasParentMeta = showCompany || visiblePeriods.length > 0 || showSinglePeriod || showSingleType;
           return (
             <SortableItem key={expIds[i]} id={expIds[i]} as="div" className="relative mb-6">
               {/* Header (position + meta). Hovering here — not the bullets below —
@@ -83,34 +113,38 @@ export default function Experience({ labels }) {
                 <Editable as="div" className="font-semibold text-lg" value={exp.position} onChange={(v) => setField(["experience", i, "position"], v)} />
 
                 {/* Meta line: company | period(s) | type */}
-                <div className="text-sm opacity-75 mb-2 flex flex-wrap items-center gap-x-2">
-                  <Editable inline className="font-medium" value={exp.company} onChange={(v) => setField(["experience", i, "company"], v)} />
-                  {exp.periods ? (
-                    exp.periods.map((p, pi) => (
-                      <span key={pi} className="flex items-center gap-2">
-                        <span>|</span>
+                {hasParentMeta && (
+                  <div className="text-sm opacity-75 mb-2 flex flex-wrap items-center gap-x-2">
+                    {showCompany && <Editable inline className="font-medium" value={exp.company} onChange={(v) => setField(["experience", i, "company"], v)} />}
+                    {visiblePeriods.map((p) => {
+                      const pi = exp.periods.indexOf(p);
+                      return (
+                        <span key={pi} className="flex items-center gap-2">
+                          {showCompany || pi > 0 ? <span>|</span> : null}
                         <Editable inline value={p.period} onChange={(v) => setField(["experience", i, "periods", pi, "period"], v)} />
-                        {(p.type || editMode) && (
+                        {(hasText(p.type) || showEmptyParentMeta) && (
                           <>
                             <span>·</span>
                             <Editable inline value={p.type || ""} onChange={(v) => setField(["experience", i, "periods", pi, "type"], v)} />
                           </>
                         )}
                       </span>
-                    ))
-                  ) : (
-                    <>
-                      <span>|</span>
+                      );
+                    })}
+                    {showSinglePeriod && (
+                      <>
+                        {showCompany ? <span>|</span> : null}
                       <Editable inline value={exp.period || ""} onChange={(v) => setField(["experience", i, "period"], v)} />
                     </>
-                  )}
-                  {!exp.periods && (exp.type || editMode) && (
-                    <>
-                      <span>|</span>
+                    )}
+                    {showSingleType && (
+                      <>
+                        {showCompany || showSinglePeriod ? <span>|</span> : null}
                       <Editable inline value={exp.type || ""} placeholder="Type (optional)" onChange={(v) => setField(["experience", i, "type"], v)} />
                     </>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
                 <RowControls group="exp" onUp={() => moveItem(["experience"], i, i - 1)} onDown={() => moveItem(["experience"], i, i + 1)} onRemove={() => removeItem(["experience"], i)} />
               </div>
 
@@ -139,11 +173,14 @@ export default function Experience({ labels }) {
                   </SortableList>
                   <AddButton
                     label="Add role"
-                    onClick={() => addItem(["experience", i, "roles"], { title: "Role title", period: "Period", type: "", responsibilities: ["New responsibility"] })}
+                    onClick={() => addItem(["experience", i, "roles"], newRole())}
                   />
                 </div>
               ) : (
-                <Responsibilities path={["experience", i, "responsibilities"]} items={exp.responsibilities || []} />
+                <>
+                  <Responsibilities path={["experience", i, "responsibilities"]} items={exp.responsibilities || []} />
+                  <AddButton label="Add role" onClick={() => setField(["experience", i], convertExperienceToRoles(exp))} />
+                </>
               )}
             </SortableItem>
           );

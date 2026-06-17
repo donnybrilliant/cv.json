@@ -18,18 +18,17 @@ function normalizeDoc(doc) {
     doc.theme.color = DEFAULT_THEME;
   }
 
-  // Contact model: email & phone are bare dedicated fields; locations are their
-  // own list; everything else (portfolio, profiles, …) lives in a flexible
-  // links list. Migrate older shapes (fixed fields, or email/phone-in-links).
+  // Contact model: email is a bare dedicated field; phones & locations are
+  // lists; everything else (portfolio, profiles, …) lives in a flexible links
+  // list. Migrate older shapes (fixed fields, or email/phone-in-links).
   const c = doc.personalInfo?.contact;
   if (c) {
     if (!Array.isArray(c.links)) c.links = [];
     // Pull email/phone back out of links (an earlier format kept them there).
     const mailLink = c.links.find((l) => /^mailto:/i.test(l?.url || ""));
-    const telLink = c.links.find((l) => /^tel:/i.test(l?.url || ""));
+    const telLinks = c.links.filter((l) => /^tel:/i.test(l?.url || ""));
     if (mailLink && c.email == null) c.email = mailLink.url.replace(/^mailto:/i, "").trim();
-    if (telLink && c.phone == null) c.phone = telLink.url.replace(/^tel:/i, "").trim();
-    c.links = c.links.filter((l) => l !== mailLink && l !== telLink);
+    c.links = c.links.filter((l) => l !== mailLink && !telLinks.includes(l));
     // Migrate legacy fixed link fields into the list.
     if (c.website) {
       c.links.push({ url: c.website, label: "Portfolio" });
@@ -44,7 +43,17 @@ function normalizeDoc(doc) {
       delete c.linkedin;
     }
     if (typeof c.email !== "string") c.email = "";
-    if (typeof c.phone !== "string") c.phone = "";
+    if (!Array.isArray(c.phones)) c.phones = [];
+    if (typeof c.phone === "string" && c.phone.trim()) {
+      const num = c.phone.trim();
+      if (!c.phones.includes(num)) c.phones.unshift(num);
+    }
+    for (const link of telLinks) {
+      const num = link.url.replace(/^tel:/i, "").trim();
+      if (num && !c.phones.includes(num)) c.phones.push(num);
+    }
+    delete c.phone;
+    c.phones = c.phones.map((p) => String(p || ""));
     if (!Array.isArray(c.locations)) c.locations = [];
   }
 

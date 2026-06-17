@@ -5,7 +5,7 @@
     "bio": "CV de ejemplo para el editor. Sustituye este texto por tu propio resumen. Los documentos en vivo se guardan en data/ en tu máquina y no se suben a git.",
     "contact": {
       "email": "tu@ejemplo.com",
-      "phone": "+34 600 00 00 00",
+      "phones": ["+34 600 00 00 00"],
       "locations": [
         {
           "city": "Ciudad Ejemplo",

@@ -201,9 +201,11 @@ export default function Sidebar({ labels }) {
   const { personalInfo, education, skills, certifications, languages } = doc;
   const c = personalInfo.contact;
   const links = c.links || [];
+  const phones = c.phones || [];
   const locations = c.locations || [];
 
   const linkIds = links.map((_, i) => `link-${i}`);
+  const phoneIds = phones.map((_, i) => `phone-${i}`);
   const locIds = locations.map((_, i) => `loc-${i}`);
   const eduIds = education.map((_, i) => `edu-${i}`);
   const skillIds = skills.map((_, i) => `skill-${i}`);
@@ -219,9 +221,34 @@ export default function Sidebar({ labels }) {
         <div>
           <SectionTitle icon={Briefcase}>{labels.contact}</SectionTitle>
           <div className="space-y-3">
-            {/* Email & phone (bare values) */}
+            {/* Email (bare value) & phones */}
             <SimpleField icon={Mail} value={c.email} placeholder="you@example.com" href={`mailto:${c.email}`} path={[...CONTACT, "email"]} />
-            <SimpleField icon={Phone} value={c.phone} placeholder="+47 000 00 000" href={`tel:${c.phone}`} path={[...CONTACT, "phone"]} />
+            <SortableList ids={phoneIds} onReorder={(f, t) => moveItem([...CONTACT, "phones"], f, t)}>
+              {phones.map((phone, i) => {
+                if (!editMode && !phone) return null;
+                return (
+                  <SortableItem key={phoneIds[i]} id={phoneIds[i]} as="div" className="relative group/item flex items-center gap-2">
+                    <Phone className={`w-4 h-4 ${ICON} shrink-0`} />
+                    {editMode ? (
+                      <Editable inline className="text-sm pr-14" value={phone} placeholder="+47 000 00 000" onChange={(v) => setField([...CONTACT, "phones", i], v)} />
+                    ) : (
+                      <span className="text-sm">
+                        <a href={`tel:${phone}`} target="_blank" rel="noreferrer">
+                          {phone}
+                        </a>
+                      </span>
+                    )}
+                    <RowControls
+                      group="item"
+                      onUp={() => moveItem([...CONTACT, "phones"], i, i - 1)}
+                      onDown={() => moveItem([...CONTACT, "phones"], i, i + 1)}
+                      onRemove={() => removeItem([...CONTACT, "phones"], i)}
+                    />
+                  </SortableItem>
+                );
+              })}
+            </SortableList>
+            <AddButton label="Add phone" onClick={() => addItem([...CONTACT, "phones"], "")} />
 
             {/* Locations (city / country with a map link) */}
             <SortableList ids={locIds} onReorder={(f, t) => moveItem([...CONTACT, "locations"], f, t)}>
