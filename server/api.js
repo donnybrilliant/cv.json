@@ -6,7 +6,8 @@ import { Low } from "lowdb";
 import { JSONFile } from "lowdb/node";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { tailorCv, streamCoverLetter } from "./ai.js";
+import { createHash } from "node:crypto";
+import { tailorCv, streamCoverLetter, extractCompany, isDebug, debugLevel } from "./ai.js";
 
 const ROOT = process.cwd();
 const DATA_DIR = path.join(ROOT, "data");
@@ -92,25 +93,9 @@ async function findAvatar() {
   return files.find((f) => /^avatar\.(png|jpg|webp|gif|svg)$/.test(f)) || null;
 }
 
-// Resolve a job posting to plain text. Pasted text is used as-is; a URL is
-// fetched server-side (avoids browser CORS) and stripped to readable text.
-// Note: a plain fetch only sees server-rendered HTML — JS-heavy job boards
-// (LinkedIn, some Workday/Greenhouse pages) may return little, so pasted text
-// is the reliable path.
-async function resolveJobText(job) {
-  if (job?.text && job.text.trim()) return job.text.trim();
-  const url = job?.url && String(job.url).trim();
-  if (!url) throw new Error("Provide a job description (text or url).");
-  if (!/^https?:\/\//i.test(url))
-    throw new Error("URL must start with http(s)://");
-  const resp = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (cv.json job tailor)" },
-    redirect: "follow",
-  });
-  if (!resp.ok)
-    throw new Error(`Could not fetch the URL (HTTP ${resp.status}).`);
-  const html = await resp.text();
-  const text = html
+// Strip an HTML document down to readable text.
+function htmlToText(html) {
+  return html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
@@ -123,12 +108,290 @@ async function resolveJobText(job) {
     .replace(/&quot;/gi, '"')
     .replace(/\s+/g, " ")
     .trim();
-  if (text.length < 80) {
+}
+
+// Wrap fetch with an abort timeout so a slow or hung upstream (the JS-rendering
+// reader can stall on the free tier) can never block the request indefinitely.
+async function fetchWithTimeout(url, { timeoutMs = 12000, ...opts } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Plain server-side fetch: only sees server-rendered HTML.
+async function fetchDirectText(url, timeoutMs = 10000) {
+  const resp = await fetchWithTimeout(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (cv.json job tailor)" },
+    redirect: "follow",
+    timeoutMs,
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return htmlToText(await resp.text());
+}
+
+// Build the headers for a Jina reader request. If JINA_API_KEY is set we send it
+// as a Bearer token (faster, higher rate limits); otherwise the request goes to
+// the free anonymous tier.
+//
+// IMPORTANT: the link summary (X-With-Links-Summary) is only appended in the
+// default markdown format — the plain "text" format strips it. So we only force
+// text when we DON'T need links; when we do, we take markdown (which still
+// carries the page text, just with markdown links we can parse out).
+function readerHeaders(env, withLinks) {
+  const headers = {
+    "User-Agent": "Mozilla/5.0 (cv.json job tailor)",
+  };
+  if (withLinks) {
+    headers["X-With-Links-Summary"] = "true";
+  } else {
+    headers["X-Return-Format"] = "text";
+  }
+  const key = env?.JINA_API_KEY && String(env.JINA_API_KEY).trim();
+  if (key) headers["Authorization"] = `Bearer ${key}`;
+  return headers;
+}
+
+// Fallback for JS-heavy pages (LinkedIn, Workday, Greenhouse, etc.): the Jina
+// AI Reader renders the page and returns clean, already-extracted text. This is
+// an external service — the URL (not the CV) is sent to it. With `withLinks` it
+// also appends a link summary, so we can get a page's text AND its links from a
+// single render instead of fetching it twice. Pass `env` to use JINA_API_KEY.
+async function fetchReaderText(url, { env, timeoutMs = 18000, withLinks = false } = {}) {
+  const resp = await fetchWithTimeout(`https://r.jina.ai/${url}`, {
+    headers: readerHeaders(env, withLinks),
+    redirect: "follow",
+    timeoutMs,
+  });
+  if (!resp.ok) throw new Error(`reader HTTP ${resp.status}`);
+  return (await resp.text()).replace(/\s+\n/g, "\n").trim();
+}
+
+// Fetch a URL as text, trying a direct fetch first and falling back to the
+// reader service when the direct result is too thin to be the real content.
+// Pass `label` to emit debug logs about which path was used, `env` for the key.
+async function fetchUrlText(url, { env, minDirect = 600, label } = {}) {
+  let text = "";
+  let via = "direct";
+  try {
+    text = await fetchDirectText(url);
+  } catch (e) {
+    if (label) console.log(`[${label}] direct fetch failed: ${e.message}`);
+  }
+  if (text.length < minDirect) {
+    try {
+      const viaReader = await fetchReaderText(url, { env });
+      if (viaReader.length > text.length) {
+        text = viaReader;
+        via = "reader";
+      }
+    } catch (e) {
+      if (label) console.log(`[${label}] reader fetch failed: ${e.message}`);
+    }
+  }
+  if (label) console.log(`[${label}] fetched ${url} via ${via} (${text.length} chars)`);
+  return text;
+}
+
+// Shared bounds for the small in-memory caches below (job text + company
+// research): reuse for the TTL window and the max number of entries kept.
+const RESEARCH_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const RESEARCH_CACHE_MAX = 20;
+
+// Cache resolved job text per URL so the tailor + cover-letter calls (and repeat
+// clicks) for the same posting don't refetch/re-render it. Same TTL as research.
+const jobTextCache = new Map(); // url -> { text, ts }
+
+// Resolve a job posting to plain text. Pasted text is used as-is; a URL is
+// fetched server-side (avoids browser CORS), with a JS-rendering reader
+// fallback so JS-heavy boards still work, and cached by URL.
+async function resolveJobText(job, env) {
+  if (job?.text && job.text.trim()) return job.text.trim();
+  const url = job?.url && String(job.url).trim();
+  if (!url) throw new Error("Provide a job description (text or url).");
+  if (!/^https?:\/\//i.test(url))
+    throw new Error("URL must start with http(s)://");
+
+  const hit = jobTextCache.get(url);
+  if (hit && Date.now() - hit.ts < RESEARCH_TTL_MS) {
+    if (isDebug(env)) console.log(`[job] cache hit for ${url}`);
+    return hit.text;
+  }
+  if (isDebug(env)) console.log(`[job] cache miss for ${url}`);
+
+  const text = await fetchUrlText(url, { env, label: isDebug(env) ? "job" : undefined });
+  if (!text || text.length < 80) {
     throw new Error(
       "Couldn't extract enough text from that URL — try pasting the job description instead.",
     );
   }
-  return text.slice(0, 20000); // cap to keep prompts reasonable
+  const resolved = text.slice(0, 20000); // cap to keep prompts reasonable
+  jobTextCache.set(url, { text: resolved, ts: Date.now() });
+  if (jobTextCache.size > RESEARCH_CACHE_MAX) {
+    jobTextCache.delete(jobTextCache.keys().next().value);
+  }
+  return resolved;
+}
+
+// Parse same-site links out of a reader body that was fetched with the
+// link-summary option. Pure (no network): returns normalised, deduped, same-host
+// URLs, so we can reuse the single homepage render instead of fetching it twice.
+function parseSameSiteLinks(body, base) {
+  let host;
+  try {
+    host = new URL(base).host;
+  } catch {
+    return [];
+  }
+  const seen = new Set();
+  const links = [];
+  for (let raw of String(body).match(/https?:\/\/[^\s)\]]+/g) || []) {
+    raw = raw.replace(/[.,)\]]+$/, ""); // strip trailing punctuation
+    let u;
+    try {
+      u = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (u.host !== host) continue; // same site only
+    if (/\.(png|jpe?g|gif|svg|webp|pdf|zip|mp4|mp3|css|js|ico|woff2?)$/i.test(u.pathname)) continue;
+    const norm = (u.origin + u.pathname).replace(/\/+$/, "");
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      links.push(norm);
+    }
+  }
+  return links;
+}
+
+// Which internal paths look informative enough to crawl first.
+const RESEARCH_PRIORITY =
+  /(about|om-?oss|company|selskap|team|product|produkt|solution|losning|løsning|service|tjenest|feature|funksjon|platform|plattform|technolog|teknolog|career|jobb|stilling|hvem|hva)/i;
+
+// Bounds for the company crawl, configurable via env (defaults in parens):
+//   RESEARCH_MAX_PAGES (6)   total pages to read, incl. the homepage
+//   RESEARCH_PER_PAGE  (2200) chars kept per page
+//   RESEARCH_TOTAL_CAP (12000) overall char cap, keeps the prompt from ballooning
+// A non-numeric/invalid value falls back to the default.
+function researchBounds(env = {}) {
+  const num = (v, fallback) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+  };
+  return {
+    maxPages: num(env.RESEARCH_MAX_PAGES, 6),
+    perPage: num(env.RESEARCH_PER_PAGE, 2200),
+    totalCap: num(env.RESEARCH_TOTAL_CAP, 12000),
+    priority: RESEARCH_PRIORITY,
+  };
+}
+
+// Best-effort company research: ask the model for the employer + website from
+// the posting, then crawl a bounded set of the company's own pages (homepage +
+// prioritised internal links). Never throws — research is a bonus, not a
+// requirement for tailoring.
+//
+// NOTE: verbose [research] logging below is temporary/diagnostic — remove once
+// the research step is dialled in.
+async function buildCompanyInfo({ env, jobText }) {
+  const bounds = researchBounds(env);
+  const debug = isDebug(env);
+  const log = (...a) => debug && console.log(...a);
+  const t0 = Date.now();
+  const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s`;
+  try {
+    log("\n[research] ── company research start ──");
+    log(`[research] job text length: ${jobText.length} chars`);
+    log(
+      `[research] bounds: maxPages=${bounds.maxPages} perPage=${bounds.perPage} totalCap=${bounds.totalCap}` +
+        ` | jina key: ${env?.JINA_API_KEY ? "yes" : "no (free tier)"}`,
+    );
+    const { company, website } = await extractCompany({ env, jobText });
+    log(`[research] model extracted (${elapsed()}):`, JSON.stringify({ company, website }));
+    let info = company ? `Company: ${company}\n` : "";
+    let site = website && String(website).trim();
+    if (site) {
+      if (!/^https?:\/\//i.test(site)) site = `https://${site}`;
+      const base = site.replace(/\/+$/, "");
+
+      // Render the homepage ONCE, asking the reader for both the page text and
+      // its link summary — no second render just to discover links.
+      let home = await fetchReaderText(base, { env, withLinks: true }).catch((e) => {
+        log(`[research] homepage reader failed: ${e.message}`);
+        return "";
+      });
+      if (home.length < 400) {
+        const direct = await fetchDirectText(base).catch(() => "");
+        if (direct.length > home.length) home = direct;
+      }
+      log(`[research] homepage -> ${home.length} chars (${elapsed()})`);
+      if (home) info += `\nHomepage:\n${home.slice(0, bounds.perPage)}`;
+
+      // Crawl a bounded, prioritised set of the site's own links (parsed from
+      // the homepage render above). Informative paths (about/product/…) first.
+      // Each page goes direct-first, reader-only-as-fallback (same as the job
+      // URL path) — fast/free for server-rendered pages, reader only when a page
+      // is a JS shell with too little text.
+      const links = parseSameSiteLinks(home, base)
+        .filter((u) => u.replace(/\/+$/, "") !== base)
+        .sort(
+          (a, b) =>
+            (bounds.priority.test(b) ? 1 : 0) - (bounds.priority.test(a) ? 1 : 0),
+        )
+        .slice(0, bounds.maxPages - 1);
+      log(`[research] crawling ${links.length} pages (${elapsed()})`);
+
+      const fetched = await Promise.allSettled(
+        links.map((u) => fetchUrlText(u, { env, label: debug ? "research" : undefined })),
+      );
+      links.forEach((u, i) => {
+        if (info.length > bounds.totalCap) return; // keep the prompt bounded
+        const c = fetched[i].status === "fulfilled" ? fetched[i].value : "";
+        if (c && c.length > 200) info += `\n\n[${u}]\n${c.slice(0, bounds.perPage)}`;
+      });
+    } else {
+      log("[research] no website to fetch");
+    }
+    info = info.trim();
+    log(`[research] final companyInfo: ${info.length} chars (${elapsed()})`);
+    if (debugLevel(env) >= 2) {
+      log(
+        "[research] --- company research (verbose) ---\n" +
+          (info || "(empty)") +
+          "\n[research] --- end company research ---",
+      );
+    }
+    log(`[research] ── company research end (${elapsed()}) ──\n`);
+    return info || null;
+  } catch (e) {
+    console.log(`[research] failed after ${elapsed()}: ${e?.message || e}`);
+    return null;
+  }
+}
+
+// Small in-memory cache so company research is computed once per distinct job
+// input and reused across the tailor + cover-letter calls (and repeat clicks)
+// while the posting hasn't changed. Keyed by a hash of the resolved job text.
+const researchCache = new Map(); // key -> { info, ts }
+
+async function getCompanyInfo({ env, jobText }) {
+  const key = createHash("sha1").update(jobText).digest("hex");
+  const hit = researchCache.get(key);
+  if (hit && Date.now() - hit.ts < RESEARCH_TTL_MS) {
+    if (isDebug(env)) console.log(`[research] cache hit (${key.slice(0, 8)})`);
+    return hit.info;
+  }
+  if (isDebug(env)) console.log(`[research] cache miss (${key.slice(0, 8)})`);
+  const info = await buildCompanyInfo({ env, jobText });
+  researchCache.set(key, { info, ts: Date.now() });
+  // Evict the oldest entry if the cache grows past its cap (insertion-ordered).
+  if (researchCache.size > RESEARCH_CACHE_MAX) {
+    researchCache.delete(researchCache.keys().next().value);
+  }
+  return info;
 }
 
 export function cvApiMiddleware(env = process.env) {
@@ -142,19 +405,40 @@ export function cvApiMiddleware(env = process.env) {
       if (parts[1] === "ai") {
         if (req.method !== "POST")
           return send(res, 405, { error: "method not allowed" });
-        const { doc, lang, job, tone } = await readBody(req);
+        const { doc, lang, job, tone, extraContext, research, cvSource } =
+          await readBody(req);
         if (!doc || typeof doc !== "object")
           return send(res, 400, { error: "missing cv document" });
         if (!LANGS.includes(lang))
           return send(res, 400, { error: "unknown language" });
-        const jobText = await resolveJobText(job);
+        const jobText = await resolveJobText(job, env);
+        const companyInfo = research
+          ? await getCompanyInfo({ env, jobText })
+          : null;
 
         if (parts[2] === "tailor") {
-          const tailored = await tailorCv({ env, doc, jobText, lang });
+          const tailored = await tailorCv({
+            env,
+            doc,
+            jobText,
+            lang,
+            extraContext,
+            companyInfo,
+            cvSource,
+          });
           return send(res, 200, tailored);
         }
         if (parts[2] === "cover-letter") {
-          const result = streamCoverLetter({ env, doc, jobText, lang, tone });
+          const result = streamCoverLetter({
+            env,
+            doc,
+            jobText,
+            lang,
+            tone,
+            extraContext,
+            companyInfo,
+            cvSource,
+          });
           // Stream plain text straight to the client (text/plain chunks).
           return result.pipeTextStreamToResponse(res);
         }

@@ -31,21 +31,23 @@ export const deleteVersion = (name, lang) =>
   }).then(json);
 
 // AI: tailor the whole CV to a job posting. `job` is { text } or { url }.
-// Returns a new tailored document (same shape as the current doc).
-export const tailorCv = (lang, doc, job) =>
+// `opts` may carry { extraContext, research }. Returns a new tailored document
+// (same shape as the current doc).
+export const tailorCv = (lang, doc, job, opts = {}) =>
   fetch("/api/ai/tailor", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lang, doc, job }),
+    body: JSON.stringify({ lang, doc, job, ...opts }),
   }).then(json);
 
 // AI: stream a cover letter. Calls `onChunk(textSoFar)` as text arrives and
-// resolves with the full letter. `job` is { text } or { url }.
-export const coverLetter = async (lang, doc, job, tone, onChunk) => {
+// resolves with the full letter. `job` is { text } or { url }; `opts` may carry
+// { tone, extraContext, research }.
+export const coverLetter = async (lang, doc, job, opts = {}, onChunk) => {
   const res = await fetch("/api/ai/cover-letter", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ lang, doc, job, tone }),
+    body: JSON.stringify({ lang, doc, job, ...opts }),
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   const reader = res.body.getReader();

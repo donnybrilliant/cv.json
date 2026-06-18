@@ -83,6 +83,7 @@ export const useCvStore = create()(
     immer((set, get) => ({
       doc: null,
       lang: "no",
+      cvSource: null, // debug label: data/cv.{lang}.json or data/versions/{name}.{lang}.json
       editMode: false,
       saveState: "idle", // idle | saving | saved | error
       loading: true,
@@ -122,6 +123,7 @@ export const useCvStore = create()(
         set((d) => {
           d.doc = doc;
           d.lang = lang;
+          d.cvSource = `data/cv.${lang}.json`;
           d.loading = false;
         });
         try {
@@ -245,22 +247,26 @@ export const useCvStore = create()(
         const { lang } = get();
         const doc = await api.getVersion(name, lang);
         get().replaceDoc(doc); // undoable
+        set((d) => {
+          d.cvSource = `data/versions/${name}.${lang}.json`;
+        });
       },
 
       // --- AI: tailor the whole CV to a job posting ---
       // Applies immediately (per design); a safety snapshot is saved first and
-      // the change is undoable via ⌘Z. `job` is { text } or { url }.
-      aiTailor: async (job) => {
+      // the change is undoable via ⌘Z. `job` is { text } or { url }; `opts` may
+      // carry { extraContext, research }.
+      aiTailor: async (job, opts = {}) => {
         set((d) => {
           d.aiStatus = "tailoring";
           d.aiError = null;
         });
         try {
-          const { lang, doc } = get();
+          const { lang, doc, cvSource } = get();
           const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
           // Best-effort safety net; don't block tailoring if it fails.
           await api.createVersion(`before-tailor-${stamp}`, lang, doc).catch(() => {});
-          const tailored = await api.tailorCv(lang, doc, job);
+          const tailored = await api.tailorCv(lang, doc, job, { ...opts, cvSource });
           get().replaceDoc(tailored); // undoable + autosaves to disk
           set((d) => {
             d.aiStatus = "idle";
