@@ -15,9 +15,18 @@ function Tags({ projectIndex, tags }) {
   return (
     <div className="flex flex-wrap gap-1.5 mt-1">
       {tags.map((tag, ti) => (
-        <span key={ti} className="text-xs bg-[var(--cv-chip-bg)] px-2 py-0.5 rounded">
+        <span
+          key={ti}
+          className="text-xs bg-[var(--cv-chip-bg)] px-2 py-0.5 rounded"
+        >
           {editMode ? (
-            <Editable inline value={tag} onChange={(v) => setField(["projects", projectIndex, "tags", ti], v)} />
+            <Editable
+              inline
+              value={tag}
+              onChange={(v) =>
+                setField(["projects", projectIndex, "tags", ti], v)
+              }
+            />
           ) : (
             tag
           )}
@@ -61,9 +70,17 @@ export default function Projects({ labels }) {
 
   return (
     <Section sectionKey="projects" icon={FolderGit2} title={labels.projects}>
-      <SortableList ids={ids} onReorder={(from, to) => moveItem(["projects"], from, to)}>
+      <SortableList
+        ids={ids}
+        onReorder={(from, to) => moveItem(["projects"], from, to)}
+      >
         {projects.map((p, i) => (
-          <SortableItem key={ids[i]} id={ids[i]} as="div" className="relative mb-5">
+          <SortableItem
+            key={ids[i]}
+            id={ids[i]}
+            as="div"
+            className="relative mb-5"
+          >
             <div className="group/exp">
               <div className="flex flex-wrap items-center gap-x-2">
                 <Editable
@@ -73,17 +90,32 @@ export default function Projects({ labels }) {
                 />
                 {(p.period || editMode) && (
                   <span className="text-sm opacity-75">
-                    <Editable inline value={p.period || ""} placeholder="Period" onChange={(v) => setField(["projects", i, "period"], v)} />
+                    <Editable
+                      inline
+                      value={p.period || ""}
+                      placeholder="Period"
+                      onChange={(v) => setField(["projects", i, "period"], v)}
+                    />
                   </span>
                 )}
                 {(p.link || editMode) &&
                   (editMode ? (
                     <span className="text-sm opacity-75 flex items-center gap-1">
                       <LinkIcon className="w-3.5 h-3.5" />
-                      <Editable inline value={p.link || ""} placeholder="https://…" onChange={(v) => setField(["projects", i, "link"], v)} />
+                      <Editable
+                        inline
+                        value={p.link || ""}
+                        placeholder="https://…"
+                        onChange={(v) => setField(["projects", i, "link"], v)}
+                      />
                     </span>
                   ) : (
-                    <a href={p.link} target="_blank" rel="noreferrer" className="text-sm text-[var(--cv-accent)] inline-flex items-center gap-1">
+                    <a
+                      href={p.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-[var(--cv-accent)] inline-flex items-center gap-1"
+                    >
                       <LinkIcon className="w-3.5 h-3.5" /> Link
                     </a>
                   ))}
@@ -111,7 +143,13 @@ export default function Projects({ labels }) {
       {editMode && (
         <button
           onClick={() =>
-            addItem(["projects"], { name: "Project name", description: "", link: "", tags: [], period: "" })
+            addItem(["projects"], {
+              name: "Project name",
+              description: "",
+              link: "",
+              tags: [],
+              period: "",
+            })
           }
           className="flex items-center gap-1 text-xs text-[var(--cv-accent)] hover:underline cursor-pointer print:hidden"
         >

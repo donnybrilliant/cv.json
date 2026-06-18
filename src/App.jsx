@@ -39,7 +39,9 @@ function Header() {
           onChange={(v) => setField(["personalInfo", "name"], v)}
         />
         {!editMode && (
-          <h2 className="text-2xl transition-all duration-500 ease-in-out">{rotating}</h2>
+          <h2 className="text-2xl transition-all duration-500 ease-in-out">
+            {rotating}
+          </h2>
         )}
       </div>
 
@@ -47,8 +49,15 @@ function Header() {
       {editMode && (
         <div className="mb-4 flex flex-wrap gap-2 print:hidden">
           {titles.map((t, i) => (
-            <span key={i} className="relative text-sm bg-[var(--cv-chip-bg)] px-2 py-1 rounded flex items-center gap-1">
-              <Editable inline value={t} onChange={(v) => setField(["personalInfo", "titles", i], v)} />
+            <span
+              key={i}
+              className="relative text-sm bg-[var(--cv-chip-bg)] px-2 py-1 rounded flex items-center gap-1"
+            >
+              <Editable
+                inline
+                value={t}
+                onChange={(v) => setField(["personalInfo", "titles", i], v)}
+              />
               <button
                 onClick={() => removeItem(["personalInfo", "titles"], i)}
                 className="text-gray-400 hover:text-red-600 cursor-pointer"

@@ -59,12 +59,19 @@ function SimpleField({ icon: Icon, value, placeholder, href, path }) {
   const setField = useCvStore((s) => s.setField);
   if (!editMode && !value) return null;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <Icon className={`w-4 h-4 ${ICON} shrink-0`} />
       {editMode ? (
-        <Editable inline className="text-sm" value={value} placeholder={placeholder} onChange={(v) => setField(path, v)} />
+        <div className="flex-1 min-w-0">
+          <Editable
+            className="text-sm"
+            value={value}
+            placeholder={placeholder}
+            onChange={(v) => setField(path, v)}
+          />
+        </div>
       ) : (
-        <span className="text-sm">
+        <span className="text-sm min-w-0 break-words">
           <a href={href} target="_blank" rel="noreferrer">
             {value}
           </a>
@@ -99,10 +106,13 @@ function ContactLinkRow({ index, link }) {
   }
 
   return (
-    <SortableItem id={`link-${index}`} as="div" className="relative group/item pr-14">
+    <SortableItem id={`link-${index}`} as="div" className="relative group/item">
       <div className="flex items-start gap-2">
         <span className="mt-0.5">
-          <IconPicker iconKey={iconKey} onPick={(k) => setField([...base, "icon"], k)} />
+          <IconPicker
+            iconKey={iconKey}
+            onPick={(k) => setField([...base, "icon"], k)}
+          />
         </span>
         <div className="flex-1 min-w-0">
           <Editable
@@ -115,7 +125,9 @@ function ContactLinkRow({ index, link }) {
             className="text-xs opacity-70"
             value={link.label || detectedLabel}
             placeholder="Label"
-            onChange={(v) => setField([...base, "label"], v === detectedLabel ? "" : v)}
+            onChange={(v) =>
+              setField([...base, "label"], v === detectedLabel ? "" : v)
+            }
           />
         </div>
       </div>
@@ -136,7 +148,9 @@ function Avatar({ name }) {
   const avatarExists = useCvStore((s) => s.avatarExists);
   const uploadAvatar = useCvStore((s) => s.uploadAvatar);
   const deleteAvatar = useCvStore((s) => s.deleteAvatar);
-  const hidden = useCvStore((s) => s.doc.hiddenSections?.includes("profilePicture"));
+  const hidden = useCvStore((s) =>
+    s.doc.hiddenSections?.includes("profilePicture"),
+  );
   const toggleSection = useCvStore((s) => s.toggleSection);
   const fileRef = useRef(null);
 
@@ -152,7 +166,9 @@ function Avatar({ name }) {
   if (!editMode && hidden) return null;
 
   return (
-    <div className={`max-w-48 mx-auto my-11 relative group/avatar ${hidden ? "opacity-40 print:hidden" : ""}`}>
+    <div
+      className={`max-w-48 mx-auto my-11 relative group/avatar ${hidden ? "opacity-40 print:hidden" : ""}`}
+    >
       <img
         key={avatarVersion}
         src={avatarUrl(avatarVersion)}
@@ -166,11 +182,19 @@ function Avatar({ name }) {
       />
       {editMode && (
         <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-full bg-black/40 opacity-0 group-hover/avatar:opacity-100 transition print:hidden">
-          <button onClick={() => fileRef.current?.click()} className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer" title="Upload photo">
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer"
+            title="Upload photo"
+          >
             <Camera className="w-5 h-5" />
           </button>
           {avatarExists && (
-            <button onClick={() => deleteAvatar()} className="p-2 rounded-full bg-white/90 text-gray-700 hover:text-red-600 hover:bg-white cursor-pointer" title="Remove photo">
+            <button
+              onClick={() => deleteAvatar()}
+              className="p-2 rounded-full bg-white/90 text-gray-700 hover:text-red-600 hover:bg-white cursor-pointer"
+              title="Remove photo"
+            >
               <Trash2 className="w-5 h-5" />
             </button>
           )}
@@ -178,12 +202,28 @@ function Avatar({ name }) {
             type="button"
             onClick={() => toggleSection("profilePicture")}
             className="p-2 rounded-full bg-white/90 text-gray-700 hover:bg-white cursor-pointer"
-            title={hidden ? "Show profile picture (will appear in PDF)" : "Hide profile picture from Print/PDF"}
-            aria-label={hidden ? "Show profile picture" : "Hide profile picture"}
+            title={
+              hidden
+                ? "Show profile picture (will appear in PDF)"
+                : "Hide profile picture from Print/PDF"
+            }
+            aria-label={
+              hidden ? "Show profile picture" : "Hide profile picture"
+            }
           >
-            {hidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            {hidden ? (
+              <EyeOff className="w-5 h-5" />
+            ) : (
+              <Eye className="w-5 h-5" />
+            )}
           </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPick} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={onPick}
+          />
         </div>
       )}
     </div>
@@ -222,18 +262,45 @@ export default function Sidebar({ labels }) {
           <SectionTitle icon={Briefcase}>{labels.contact}</SectionTitle>
           <div className="space-y-3">
             {/* Email (bare value) & phones */}
-            <SimpleField icon={Mail} value={c.email} placeholder="you@example.com" href={`mailto:${c.email}`} path={[...CONTACT, "email"]} />
-            <SortableList ids={phoneIds} onReorder={(f, t) => moveItem([...CONTACT, "phones"], f, t)}>
+            <SimpleField
+              icon={Mail}
+              value={c.email}
+              placeholder="you@example.com"
+              href={`mailto:${c.email}`}
+              path={[...CONTACT, "email"]}
+            />
+            <SortableList
+              ids={phoneIds}
+              onReorder={(f, t) => moveItem([...CONTACT, "phones"], f, t)}
+            >
               {phones.map((phone, i) => {
                 if (!editMode && !phone) return null;
                 return (
-                  <SortableItem key={phoneIds[i]} id={phoneIds[i]} as="div" className="relative group/item flex items-center gap-2">
+                  <SortableItem
+                    key={phoneIds[i]}
+                    id={phoneIds[i]}
+                    as="div"
+                    className="relative group/item flex items-center gap-2 min-w-0"
+                  >
                     <Phone className={`w-4 h-4 ${ICON} shrink-0`} />
                     {editMode ? (
-                      <Editable inline className="text-sm pr-14" value={phone} placeholder="+47 000 00 000" onChange={(v) => setField([...CONTACT, "phones", i], v)} />
+                      <div className="flex-1 min-w-0">
+                        <Editable
+                          className="text-sm"
+                          value={phone}
+                          placeholder="+47 000 00 000"
+                          onChange={(v) =>
+                            setField([...CONTACT, "phones", i], v)
+                          }
+                        />
+                      </div>
                     ) : (
-                      <span className="text-sm">
-                        <a href={`tel:${phone}`} target="_blank" rel="noreferrer">
+                      <span className="text-sm min-w-0 break-words">
+                        <a
+                          href={`tel:${phone}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           {phone}
                         </a>
                       </span>
@@ -248,20 +315,49 @@ export default function Sidebar({ labels }) {
                 );
               })}
             </SortableList>
-            <AddButton label="Add phone" onClick={() => addItem([...CONTACT, "phones"], "")} />
+            <AddButton
+              label="Add phone"
+              onClick={() => addItem([...CONTACT, "phones"], "")}
+            />
 
             {/* Locations (city / country with a map link) */}
-            <SortableList ids={locIds} onReorder={(f, t) => moveItem([...CONTACT, "locations"], f, t)}>
+            <SortableList
+              ids={locIds}
+              onReorder={(f, t) => moveItem([...CONTACT, "locations"], f, t)}
+            >
               {locations.map((loc, i) => (
-                <SortableItem key={locIds[i]} id={locIds[i]} as="div" className="relative group/item flex items-center gap-2">
-                  {i === 0 ? <House className={`w-4 h-4 ${ICON} shrink-0`} /> : <MapPin className={`w-4 h-4 ${ICON} shrink-0`} />}
+                <SortableItem
+                  key={locIds[i]}
+                  id={locIds[i]}
+                  as="div"
+                  className="relative group/item flex items-center gap-2 min-w-0"
+                >
+                  {i === 0 ? (
+                    <House className={`w-4 h-4 ${ICON} shrink-0`} />
+                  ) : (
+                    <MapPin className={`w-4 h-4 ${ICON} shrink-0`} />
+                  )}
                   {editMode ? (
-                    <span className="flex flex-wrap gap-1 text-sm pr-14">
-                      <Editable inline value={loc.city} placeholder="City" onChange={(v) => setField([...CONTACT, "locations", i, "city"], v)} />
-                      <Editable inline value={loc.country} placeholder="Country" onChange={(v) => setField([...CONTACT, "locations", i, "country"], v)} />
+                    <span className="flex flex-wrap gap-1 text-sm min-w-0">
+                      <Editable
+                        inline
+                        value={loc.city}
+                        placeholder="City"
+                        onChange={(v) =>
+                          setField([...CONTACT, "locations", i, "city"], v)
+                        }
+                      />
+                      <Editable
+                        inline
+                        value={loc.country}
+                        placeholder="Country"
+                        onChange={(v) =>
+                          setField([...CONTACT, "locations", i, "country"], v)
+                        }
+                      />
                     </span>
                   ) : (
-                    <span className="text-sm">
+                    <span className="text-sm min-w-0 break-words">
                       {loc.mapUrl ? (
                         <a href={loc.mapUrl} target="_blank" rel="noreferrer">
                           {loc.city}, {loc.country}
@@ -280,50 +376,133 @@ export default function Sidebar({ labels }) {
                 </SortableItem>
               ))}
             </SortableList>
-            <AddButton label="Add location" onClick={() => addItem([...CONTACT, "locations"], { city: "City", country: "Country", mapUrl: "" })} />
+            <AddButton
+              label="Add location"
+              onClick={() =>
+                addItem([...CONTACT, "locations"], {
+                  city: "City",
+                  country: "Country",
+                  mapUrl: "",
+                })
+              }
+            />
 
             {/* Links (auto icon + label) */}
-            <SortableList ids={linkIds} onReorder={(f, t) => moveItem([...CONTACT, "links"], f, t)}>
+            <SortableList
+              ids={linkIds}
+              onReorder={(f, t) => moveItem([...CONTACT, "links"], f, t)}
+            >
               {links.map((link, i) => (
                 <ContactLinkRow key={linkIds[i]} index={i} link={link} />
               ))}
             </SortableList>
-            <AddButton label="Add link" onClick={() => addItem([...CONTACT, "links"], { url: "" })} />
+            <AddButton
+              label="Add link"
+              onClick={() => addItem([...CONTACT, "links"], { url: "" })}
+            />
           </div>
         </div>
 
         {/* Education */}
         <div>
           <SectionTitle icon={GraduationCap}>{labels.education}</SectionTitle>
-          <SortableList ids={eduIds} onReorder={(f, t) => moveItem(["education"], f, t)}>
+          <SortableList
+            ids={eduIds}
+            onReorder={(f, t) => moveItem(["education"], f, t)}
+          >
             {education.map((edu, i) => (
-              <SortableItem key={eduIds[i]} id={eduIds[i]} as="div" className="relative group/item mb-4">
-                <Editable as="div" className="font-semibold text-sm" value={edu.degree} onChange={(v) => setField(["education", i, "degree"], v)} />
+              <SortableItem
+                key={eduIds[i]}
+                id={eduIds[i]}
+                as="div"
+                className="relative group/item mb-4"
+              >
+                <Editable
+                  as="div"
+                  className="font-semibold text-sm"
+                  value={edu.degree}
+                  onChange={(v) => setField(["education", i, "degree"], v)}
+                />
                 {(edu.specialization || editMode) && (
-                  <Editable as="div" className="text-sm opacity-90" placeholder="Specialization (optional)" value={edu.specialization || ""} onChange={(v) => setField(["education", i, "specialization"], v)} />
+                  <Editable
+                    as="div"
+                    className="text-sm opacity-90"
+                    placeholder="Specialization (optional)"
+                    value={edu.specialization || ""}
+                    onChange={(v) =>
+                      setField(["education", i, "specialization"], v)
+                    }
+                  />
                 )}
-                <Editable as="div" className="text-sm opacity-90" value={edu.institution} onChange={(v) => setField(["education", i, "institution"], v)} />
-                <Editable as="div" className="text-sm opacity-50" value={edu.year} onChange={(v) => setField(["education", i, "year"], v)} />
-                <RowControls group="item" onUp={() => moveItem(["education"], i, i - 1)} onDown={() => moveItem(["education"], i, i + 1)} onRemove={() => removeItem(["education"], i)} />
+                <Editable
+                  as="div"
+                  className="text-sm opacity-90"
+                  value={edu.institution}
+                  onChange={(v) => setField(["education", i, "institution"], v)}
+                />
+                <Editable
+                  as="div"
+                  className="text-sm opacity-50"
+                  value={edu.year}
+                  onChange={(v) => setField(["education", i, "year"], v)}
+                />
+                <RowControls
+                  group="item"
+                  onUp={() => moveItem(["education"], i, i - 1)}
+                  onDown={() => moveItem(["education"], i, i + 1)}
+                  onRemove={() => removeItem(["education"], i)}
+                />
               </SortableItem>
             ))}
           </SortableList>
-          <AddButton label="Add education" onClick={() => addItem(["education"], { degree: "Degree", institution: "Institution", year: "Year" })} />
+          <AddButton
+            label="Add education"
+            onClick={() =>
+              addItem(["education"], {
+                degree: "Degree",
+                institution: "Institution",
+                year: "Year",
+              })
+            }
+          />
         </div>
 
         {/* Skills (toggleable) */}
         <Section sectionKey="skills" icon={Code} title={labels.skills}>
-          <SortableList ids={skillIds} layout="grid" onReorder={(f, t) => moveItem(["skills"], f, t)}>
+          <SortableList
+            ids={skillIds}
+            layout="grid"
+            onReorder={(f, t) => moveItem(["skills"], f, t)}
+          >
             <div className="flex flex-wrap gap-2">
               {skills.map((skill, i) => (
-                <SortableItem key={skillIds[i]} id={skillIds[i]} as="span" dragWholeItem className="text-sm bg-[var(--cv-chip-bg)] px-2 py-1 rounded inline-flex items-center">
+                <SortableItem
+                  key={skillIds[i]}
+                  id={skillIds[i]}
+                  as="span"
+                  dragWholeItem
+                  className="text-sm bg-[var(--cv-pill-bg)] px-2 py-1 rounded inline-flex items-center max-w-full min-w-0"
+                >
                   {editMode ? (
-                    <Editable inline value={skill} onChange={(v) => setField(["skills", i], v)} />
+                    <Editable
+                      inline
+                      className="min-w-0"
+                      value={skill}
+                      onChange={(v) => setField(["skills", i], v)}
+                    />
                   ) : (
-                    skill
+                    <span className="min-w-0 break-words whitespace-normal">
+                      {skill}
+                    </span>
                   )}
                   {editMode && (
-                    <button onMouseDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onClick={() => removeItem(["skills"], i)} className="ml-1 text-gray-400 hover:text-red-600 cursor-pointer print:hidden" aria-label="Remove skill">
+                    <button
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => removeItem(["skills"], i)}
+                      className="ml-1 shrink-0 text-gray-400 hover:text-red-600 cursor-pointer print:hidden"
+                      aria-label="Remove skill"
+                    >
                       ×
                     </button>
                   )}
@@ -331,17 +510,39 @@ export default function Sidebar({ labels }) {
               ))}
             </div>
           </SortableList>
-          <AddButton label="Add skill" onClick={() => addItem(["skills"], "New skill")} />
+          <AddButton
+            label="Add skill"
+            onClick={() => addItem(["skills"], "New skill")}
+          />
         </Section>
 
         {/* Certifications (toggleable) */}
-        <Section sectionKey="certifications" icon={Award} title={labels.certifications}>
-          <SortableList ids={certIds} onReorder={(f, t) => moveItem(["certifications"], f, t)}>
+        <Section
+          sectionKey="certifications"
+          icon={Award}
+          title={labels.certifications}
+        >
+          <SortableList
+            ids={certIds}
+            onReorder={(f, t) => moveItem(["certifications"], f, t)}
+          >
             <ul className="space-y-2">
               {certifications.map((cert, i) => (
-                <SortableItem key={certIds[i]} id={certIds[i]} as="li" className="relative group/item text-sm">
+                <SortableItem
+                  key={certIds[i]}
+                  id={certIds[i]}
+                  as="li"
+                  className="relative group/item text-sm"
+                >
                   {editMode ? (
-                    <Editable as="div" className="font-semibold text-sm" value={cert.name} onChange={(v) => setField(["certifications", i, "name"], v)} />
+                    <Editable
+                      as="div"
+                      className="font-semibold text-sm"
+                      value={cert.name}
+                      onChange={(v) =>
+                        setField(["certifications", i, "name"], v)
+                      }
+                    />
                   ) : (
                     <div className="font-semibold text-sm">
                       {cert.url ? (
@@ -353,42 +554,110 @@ export default function Sidebar({ labels }) {
                       )}
                     </div>
                   )}
-                  <Editable as="div" className="text-sm opacity-90" value={cert.provider} onChange={(v) => setField(["certifications", i, "provider"], v)} />
-                  <Editable as="div" className="text-sm opacity-50" value={cert.hours} onChange={(v) => setField(["certifications", i, "hours"], v)} />
+                  <Editable
+                    as="div"
+                    className="text-sm opacity-90"
+                    value={cert.provider}
+                    onChange={(v) =>
+                      setField(["certifications", i, "provider"], v)
+                    }
+                  />
+                  <Editable
+                    as="div"
+                    className="text-sm opacity-50"
+                    value={cert.hours}
+                    onChange={(v) =>
+                      setField(["certifications", i, "hours"], v)
+                    }
+                  />
                   {editMode && (
-                    <Editable as="div" className="text-xs opacity-50" placeholder="Certificate URL (optional)" value={cert.url || ""} onChange={(v) => setField(["certifications", i, "url"], v)} />
+                    <Editable
+                      as="div"
+                      className="text-xs opacity-50"
+                      placeholder="Certificate URL (optional)"
+                      value={cert.url || ""}
+                      onChange={(v) =>
+                        setField(["certifications", i, "url"], v)
+                      }
+                    />
                   )}
-                  <RowControls group="item" onUp={() => moveItem(["certifications"], i, i - 1)} onDown={() => moveItem(["certifications"], i, i + 1)} onRemove={() => removeItem(["certifications"], i)} />
+                  <RowControls
+                    group="item"
+                    onUp={() => moveItem(["certifications"], i, i - 1)}
+                    onDown={() => moveItem(["certifications"], i, i + 1)}
+                    onRemove={() => removeItem(["certifications"], i)}
+                  />
                 </SortableItem>
               ))}
             </ul>
           </SortableList>
-          <AddButton label="Add certification" onClick={() => addItem(["certifications"], { name: "Name", provider: "Provider", hours: "" })} />
+          <AddButton
+            label="Add certification"
+            onClick={() =>
+              addItem(["certifications"], {
+                name: "Name",
+                provider: "Provider",
+                hours: "",
+              })
+            }
+          />
         </Section>
 
         {/* Languages (toggleable) */}
-        <Section sectionKey="languages" icon={Languages} title={labels.languages}>
-          <SortableList ids={langIds} onReorder={(f, t) => moveItem(["languages"], f, t)}>
+        <Section
+          sectionKey="languages"
+          icon={Languages}
+          title={labels.languages}
+        >
+          <SortableList
+            ids={langIds}
+            onReorder={(f, t) => moveItem(["languages"], f, t)}
+          >
             <ul className="space-y-2">
               {languages.map((lng, i) => (
-                <SortableItem key={langIds[i]} id={langIds[i]} as="li" className="relative group/item text-sm flex gap-1 items-center">
+                <SortableItem
+                  key={langIds[i]}
+                  id={langIds[i]}
+                  as="li"
+                  className="relative group/item text-sm flex gap-1 items-center"
+                >
                   {editMode ? (
                     <>
-                      <Editable inline value={lng.language} onChange={(v) => setField(["languages", i, "language"], v)} />
+                      <Editable
+                        inline
+                        value={lng.language}
+                        onChange={(v) =>
+                          setField(["languages", i, "language"], v)
+                        }
+                      />
                       <span>-</span>
-                      <Editable inline value={lng.level} onChange={(v) => setField(["languages", i, "level"], v)} />
+                      <Editable
+                        inline
+                        value={lng.level}
+                        onChange={(v) => setField(["languages", i, "level"], v)}
+                      />
                     </>
                   ) : (
                     <span>
                       {lng.language} - {lng.level}
                     </span>
                   )}
-                  <RowControls group="item" onUp={() => moveItem(["languages"], i, i - 1)} onDown={() => moveItem(["languages"], i, i + 1)} onRemove={() => removeItem(["languages"], i)} />
+                  <RowControls
+                    group="item"
+                    onUp={() => moveItem(["languages"], i, i - 1)}
+                    onDown={() => moveItem(["languages"], i, i + 1)}
+                    onRemove={() => removeItem(["languages"], i)}
+                  />
                 </SortableItem>
               ))}
             </ul>
           </SortableList>
-          <AddButton label="Add language" onClick={() => addItem(["languages"], { language: "Language", level: "Level" })} />
+          <AddButton
+            label="Add language"
+            onClick={() =>
+              addItem(["languages"], { language: "Language", level: "Level" })
+            }
+          />
         </Section>
 
         {/* User-defined flexible sections placed in the sidebar */}

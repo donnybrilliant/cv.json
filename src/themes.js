@@ -2,13 +2,83 @@
 // custom properties on the CV root, so components reference them via
 // `var(--cv-*)` (e.g. text-[var(--cv-icon)]). Stored per-CV in doc.theme.
 export const THEMES = {
-  blue: { label: "Blue", bg: "#eff6ff", chipBg: "#eff6ff", text: "#1e3a8a", border: "#bfdbfe", icon: "#2563eb", accent: "#2563eb", ring: "#60a5fa", ringSoft: "#bfdbfe" },
-  slate: { label: "Slate", bg: "#f8fafc", chipBg: "#f8fafc", text: "#0f172a", border: "#e2e8f0", icon: "#475569", accent: "#334155", ring: "#94a3b8", ringSoft: "#cbd5e1" },
-  emerald: { label: "Emerald", bg: "#ecfdf5", chipBg: "#ecfdf5", text: "#064e3b", border: "#a7f3d0", icon: "#059669", accent: "#059669", ring: "#34d399", ringSoft: "#a7f3d0" },
-  cyan: { label: "Cyan", bg: "#ecfeff", chipBg: "#ecfeff", text: "#164e63", border: "#a5f3fc", icon: "#0891b2", accent: "#0891b2", ring: "#22d3ee", ringSoft: "#a5f3fc" },
-  rose: { label: "Rose", bg: "#fff1f2", chipBg: "#fff1f2", text: "#881337", border: "#fecdd3", icon: "#e11d48", accent: "#e11d48", ring: "#fb7185", ringSoft: "#fecdd3" },
-  violet: { label: "Violet", bg: "#f5f3ff", chipBg: "#f5f3ff", text: "#4c1d95", border: "#ddd6fe", icon: "#7c3aed", accent: "#7c3aed", ring: "#a78bfa", ringSoft: "#ddd6fe" },
-  amber: { label: "Amber", bg: "#fffbeb", chipBg: "#fffbeb", text: "#78350f", border: "#fde68a", icon: "#d97706", accent: "#b45309", ring: "#fbbf24", ringSoft: "#fde68a" },
+  blue: {
+    label: "Blue",
+    bg: "#eff6ff",
+    chipBg: "#eff6ff",
+    text: "#1e3a8a",
+    border: "#bfdbfe",
+    icon: "#2563eb",
+    accent: "#2563eb",
+    ring: "#60a5fa",
+    ringSoft: "#bfdbfe",
+  },
+  slate: {
+    label: "Slate",
+    bg: "#f8fafc",
+    chipBg: "#f8fafc",
+    text: "#0f172a",
+    border: "#e2e8f0",
+    icon: "#475569",
+    accent: "#334155",
+    ring: "#94a3b8",
+    ringSoft: "#cbd5e1",
+  },
+  emerald: {
+    label: "Emerald",
+    bg: "#ecfdf5",
+    chipBg: "#ecfdf5",
+    text: "#064e3b",
+    border: "#a7f3d0",
+    icon: "#059669",
+    accent: "#059669",
+    ring: "#34d399",
+    ringSoft: "#a7f3d0",
+  },
+  cyan: {
+    label: "Cyan",
+    bg: "#ecfeff",
+    chipBg: "#ecfeff",
+    text: "#164e63",
+    border: "#a5f3fc",
+    icon: "#0891b2",
+    accent: "#0891b2",
+    ring: "#22d3ee",
+    ringSoft: "#a5f3fc",
+  },
+  rose: {
+    label: "Rose",
+    bg: "#fff1f2",
+    chipBg: "#fff1f2",
+    text: "#881337",
+    border: "#fecdd3",
+    icon: "#e11d48",
+    accent: "#e11d48",
+    ring: "#fb7185",
+    ringSoft: "#fecdd3",
+  },
+  violet: {
+    label: "Violet",
+    bg: "#f5f3ff",
+    chipBg: "#f5f3ff",
+    text: "#4c1d95",
+    border: "#ddd6fe",
+    icon: "#7c3aed",
+    accent: "#7c3aed",
+    ring: "#a78bfa",
+    ringSoft: "#ddd6fe",
+  },
+  amber: {
+    label: "Amber",
+    bg: "#fffbeb",
+    chipBg: "#fffbeb",
+    text: "#78350f",
+    border: "#fde68a",
+    icon: "#d97706",
+    accent: "#b45309",
+    ring: "#fbbf24",
+    ringSoft: "#fde68a",
+  },
 };
 
 export const THEME_KEYS = Object.keys(THEMES);
@@ -17,7 +87,13 @@ export const CUSTOM_THEME = "custom";
 
 function hexToRgb(hex) {
   const h = hex.replace("#", "");
-  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const full =
+    h.length === 3
+      ? h
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : h;
   const n = parseInt(full, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
@@ -26,7 +102,11 @@ function rgbToHex(r, g, b) {
   return (
     "#" +
     [r, g, b]
-      .map((x) => Math.round(Math.min(255, Math.max(0, x))).toString(16).padStart(2, "0"))
+      .map((x) =>
+        Math.round(Math.min(255, Math.max(0, x)))
+          .toString(16)
+          .padStart(2, "0"),
+      )
       .join("")
   );
 }
@@ -34,7 +114,11 @@ function rgbToHex(r, g, b) {
 function mix(a, b, weight) {
   const [ar, ag, ab] = hexToRgb(a);
   const [br, bg, bb] = hexToRgb(b);
-  return rgbToHex(ar + (br - ar) * weight, ag + (bg - ag) * weight, ab + (bb - ab) * weight);
+  return rgbToHex(
+    ar + (br - ar) * weight,
+    ag + (bg - ag) * weight,
+    ab + (bb - ab) * weight,
+  );
 }
 
 function relativeLuminance(hex) {
@@ -76,18 +160,40 @@ export function resolveTheme(theme) {
 }
 
 export function themeIconColor(theme) {
-  return resolveTheme(typeof theme === "string" ? { color: theme } : theme).icon;
+  return resolveTheme(typeof theme === "string" ? { color: theme } : theme)
+    .icon;
+}
+
+function themeColorKey(theme) {
+  if (!theme) return DEFAULT_THEME;
+  if (typeof theme === "string") return theme === "teal" ? "cyan" : theme;
+  if (theme.color === CUSTOM_THEME) return CUSTOM_THEME;
+  return theme.color || DEFAULT_THEME;
+}
+
+// Skill pills: on neutral/light themes match title chips; on tinted themes a
+// hint of the accent (lighter than the sidebar border).
+function pillBg(t, key) {
+  if (
+    key === "slate" ||
+    (key === CUSTOM_THEME && isLightColor(t.picked || t.bg, 0.9))
+  ) {
+    return t.chipBg || t.bg;
+  }
+  return mix(t.bg, t.border, 0.18);
 }
 
 // Map doc.theme (or a preset key) to CSS variables consumed across the CV.
 export function themeVars(theme) {
+  const key = themeColorKey(theme);
   const t =
     typeof theme === "string"
-      ? THEMES[theme === "teal" ? "cyan" : theme] || THEMES[DEFAULT_THEME]
+      ? THEMES[key === "teal" ? "cyan" : key] || THEMES[DEFAULT_THEME]
       : resolveTheme(theme);
   return {
     "--cv-bg": t.bg,
     "--cv-chip-bg": t.chipBg || t.bg,
+    "--cv-pill-bg": pillBg(t, key),
     "--cv-text": t.text,
     "--cv-border": t.border,
     "--cv-icon": t.icon,

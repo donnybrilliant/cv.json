@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCvStore } from "../store/cvStore";
 import { LANGUAGE_CATALOG, nativeName, englishName } from "../i18n/languages";
+import { ConfirmDialog } from "./Dialog";
 
 // Languages panel, scoped to the current version: switch between the languages
 // this version has, remove one, or AI-translate the current language into a new
@@ -18,6 +19,7 @@ export default function LanguageManager() {
   const [open, setOpen] = useState(false);
   const [targetLang, setTargetLang] = useState("");
   const [error, setError] = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const lang = useCvStore((s) => s.lang);
   const versions = useCvStore((s) => s.versions);
@@ -39,11 +41,11 @@ export default function LanguageManager() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
-      if (e.key === "Escape" && !translating) setOpen(false);
+      if (e.key === "Escape" && !translating && !confirm) setOpen(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, translating]);
+  }, [open, translating, confirm]);
 
   const onGenerate = async () => {
     setError(null);
@@ -59,37 +61,51 @@ export default function LanguageManager() {
     }
   };
 
-  const onRetranslate = async (code) => {
+  const onRetranslate = (code) => {
     setError(null);
-    if (
-      !window.confirm(
-        `Re-translate ${nativeName(code)} from ${nativeName(lang)}? ` +
-          "This replaces the current text for that language."
-      )
-    )
+    if (lang === code) {
+      setError("Switch to a different language first, then refresh this one.");
       return;
+    }
+    setConfirm({ action: "retranslate", code });
+  };
+
+  const onDelete = (code) => {
+    setConfirm({ action: "delete", code });
+  };
+
+  const closeConfirm = () => setConfirm(null);
+
+  const handleConfirm = async () => {
+    if (!confirm) return;
+    const { action, code } = confirm;
+    closeConfirm();
+    setError(null);
     try {
-      // addTranslation overwrites an existing language too.
-      const src = lang;
-      if (src === code) {
-        setError("Switch to a different language first, then refresh this one.");
-        return;
+      if (action === "retranslate") {
+        await addTranslation(code);
+      } else if (action === "delete") {
+        await removeTranslation(code);
       }
-      await addTranslation(code);
     } catch (e) {
       setError(String(e?.message || e));
     }
   };
 
-  const onDelete = async (code) => {
-    if (!window.confirm(`Remove the ${nativeName(code)} version of this CV?`)) return;
-    setError(null);
-    try {
-      await removeTranslation(code);
-    } catch (e) {
-      setError(String(e?.message || e));
-    }
-  };
+  const confirmCopy =
+    confirm?.action === "retranslate"
+      ? {
+          title: "Re-translate language?",
+          description: `Re-translate ${nativeName(confirm.code)} from ${nativeName(lang)}? This replaces the current text for that language.`,
+          confirmLabel: "Re-translate",
+        }
+      : confirm?.action === "delete"
+        ? {
+            title: "Remove language?",
+            description: `Remove the ${nativeName(confirm.code)} version of this CV? The other languages are kept.`,
+            confirmLabel: "Remove",
+          }
+        : null;
 
   const shownError = error || (aiStatus === "error" ? aiError : null);
 
@@ -105,7 +121,7 @@ export default function LanguageManager() {
 
       {open && (
         <div className="fixed inset-0 z-50 print:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={() => !translating && setOpen(false)} />
+          <div className="absolute inset-0 bg-black/30" onClick={() => !translating && !confirm && setOpen(false)} />
           <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl flex flex-col">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800">
@@ -115,7 +131,7 @@ export default function LanguageManager() {
                 )}
               </h2>
               <button
-                onClick={() => !translating && setOpen(false)}
+                onClick={() => !translating && !confirm && setOpen(false)}
                 disabled={translating}
                 className="p-1.5 rounded text-gray-500 hover:bg-gray-100 disabled:opacity-40 cursor-pointer"
                 title="Close"
@@ -225,6 +241,17 @@ export default function LanguageManager() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmCopy)}
+        title={confirmCopy?.title || ""}
+        description={confirmCopy?.description}
+        confirmLabel={confirmCopy?.confirmLabel || "Confirm"}
+        danger={confirm?.action === "delete"}
+        busy={translating}
+        onConfirm={handleConfirm}
+        onClose={closeConfirm}
+      />
     </>
   );
 }

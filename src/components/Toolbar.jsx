@@ -21,6 +21,7 @@ import { exportNodeToPdf } from "../lib/exportPdf";
 import JobTailor from "./JobTailor";
 import LanguageManager from "./LanguageManager";
 import VersionSwitcher from "./VersionSwitcher";
+import { AlertDialog } from "./Dialog";
 
 // Per-CV color theme picker (edit mode only).
 function ThemePicker() {
@@ -116,6 +117,7 @@ function SaveIndicator() {
 }
 
 export default function Toolbar({ labels }) {
+  const [alert, setAlert] = useState(null);
   const lang = useCvStore((s) => s.lang);
   const setLang = useCvStore((s) => s.setLang);
   const versions = useCvStore((s) => s.versions);
@@ -174,7 +176,10 @@ export default function Toolbar({ labels }) {
     try {
       replaceDoc(JSON.parse(await file.text()));
     } catch {
-      alert("That file is not valid JSON.");
+      setAlert({
+        title: "Invalid file",
+        description: "That file is not valid JSON.",
+      });
     }
     e.target.value = "";
   };
@@ -206,7 +211,10 @@ export default function Toolbar({ labels }) {
       await exportNodeToPdf(node, `CV - ${name} - ${lang.toUpperCase()}.pdf`);
     } catch (err) {
       console.error("PDF export failed:", err);
-      alert("PDF export failed — see console for details.");
+      setAlert({
+        title: "PDF export failed",
+        description: "Something went wrong while generating the PDF. See the console for details.",
+      });
     } finally {
       if (wasEdit) setEditMode(true);
       setMaskPdfExport(false);
@@ -327,6 +335,13 @@ export default function Toolbar({ labels }) {
         <Printer className="w-5 h-5" />
       </button>
     </div>
+
+    <AlertDialog
+      open={Boolean(alert)}
+      title={alert?.title || ""}
+      description={alert?.description}
+      onClose={() => setAlert(null)}
+    />
     </>
   );
 }
