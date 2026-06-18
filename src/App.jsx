@@ -2,48 +2,13 @@ import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { useCvStore } from "./store/cvStore";
 import { themeVars } from "./themes";
+import { resolveLabels, isRtl } from "./i18n/languages";
 import Toolbar from "./components/Toolbar";
 import Sidebar from "./components/Sidebar";
 import Experience from "./components/Experience";
 import Projects from "./components/Projects";
 import CustomSections from "./components/CustomSections";
 import Editable from "./components/Editable";
-
-const uiLabels = {
-  no: {
-    contact: "Kontakt",
-    education: "Utdanning",
-    skills: "Ferdigheter",
-    certifications: "Sertifiseringer",
-    languages: "Språk",
-    workExperience: "Arbeidserfaring",
-    projects: "Prosjekter",
-    print: "Skriv ut CV",
-    switchTo: { no: "Norsk", en: "Engelsk", es: "Spansk" },
-  },
-  en: {
-    contact: "Contact",
-    education: "Education",
-    skills: "Skills",
-    certifications: "Certifications",
-    languages: "Languages",
-    workExperience: "Work Experience",
-    projects: "Projects",
-    print: "Print Resume",
-    switchTo: { no: "Norwegian", en: "English", es: "Spanish" },
-  },
-  es: {
-    contact: "Contacto",
-    education: "Formación",
-    skills: "Habilidades",
-    certifications: "Certificaciones",
-    languages: "Idiomas",
-    workExperience: "Experiencia laboral",
-    projects: "Proyectos",
-    print: "Imprimir CV",
-    switchTo: { no: "Noruego", en: "Inglés", es: "Español" },
-  },
-};
 
 function Header() {
   const doc = useCvStore((s) => s.doc);
@@ -116,12 +81,24 @@ function Header() {
 export default function App() {
   const doc = useCvStore((s) => s.doc);
   const lang = useCvStore((s) => s.lang);
+  const languages = useCvStore((s) => s.languages);
   const load = useCvStore((s) => s.load);
+  const loadLanguages = useCvStore((s) => s.loadLanguages);
 
-  // Initial load.
+  // Initial load: fetch the language registry first, then the default doc
+  // (the first enabled language, preferring the previous "no" default).
   useEffect(() => {
-    load("no").catch((e) => console.error("Failed to load CV:", e));
-  }, [load]);
+    (async () => {
+      try {
+        const langs = await loadLanguages();
+        const enabled = langs.filter((l) => l.enabled !== false).map((l) => l.code);
+        const initial = enabled.includes("no") ? "no" : enabled[0] || "no";
+        await load(initial);
+      } catch (e) {
+        console.error("Failed to load CV:", e);
+      }
+    })();
+  }, [load, loadLanguages]);
 
   if (!doc) {
     return (
@@ -134,13 +111,15 @@ export default function App() {
     );
   }
 
-  const labels = uiLabels[lang];
+  const langMeta = languages.find((l) => l.code === lang);
+  const labels = resolveLabels(langMeta?.labels);
 
   return (
     <>
       <Toolbar labels={labels} />
       <div
         id="cv-root"
+        dir={isRtl(lang) ? "rtl" : "ltr"}
         style={themeVars(doc.theme)}
         className="w-full max-w-4xl mx-auto bg-white shadow-lg font-sans mt-16 print:mt-0"
       >

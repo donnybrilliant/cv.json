@@ -36,6 +36,8 @@ export default function JobTailor() {
   const aiStatus = useCvStore((s) => s.aiStatus);
   const aiError = useCvStore((s) => s.aiError);
   const clearAiState = useCvStore((s) => s.clearAiState);
+  const restoreRevision = useCvStore((s) => s.restoreRevision);
+  const lastTailorBackup = useCvStore((s) => s.lastTailorBackup);
 
   const tailoring = aiStatus === "tailoring";
   const busy = tailoring || writing;
@@ -209,10 +211,26 @@ export default function JobTailor() {
               </div>
 
               {tailored && !tailoring && (
-                <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 rounded px-3 py-2">
-                  <Check className="w-4 h-4 shrink-0" />
-                  CV tailored and saved. Press ⌘Z (Ctrl+Z) to undo, or restore the{" "}
-                  <code className="text-xs">before-tailor</code> snapshot from Versions.
+                <div className="space-y-2 text-sm text-green-700 bg-green-50 rounded px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 shrink-0" />
+                    CV tailored and saved. A restore point was saved first.
+                  </div>
+                  <div className="text-xs text-green-800/80">
+                    Press ⌘Z (Ctrl+Z) to undo, or restore the previous version
+                    from Languages → History at any time.
+                  </div>
+                  {lastTailorBackup && (
+                    <button
+                      onClick={async () => {
+                        await restoreRevision(lastTailorBackup);
+                        setTailored(false);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Restore previous version
+                    </button>
+                  )}
                 </div>
               )}
 

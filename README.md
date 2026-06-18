@@ -51,23 +51,40 @@ static deploy to GitHub Pages / Netlify without adding your own backend.
   file to replace it.
 - **PDF** — the _PDF_ button downloads a single-page, content-cropped,
   JPEG-compressed PDF. The printer button (`⌘P`) is the browser-print route.
-- **Languages** — NO / EN / ES, each its own file, edited independently.
+- **Languages** — start with NO / EN / ES, each its own file, edited
+  independently. Use **Languages** (edit mode) to add more: pick a source
+  language and a target, and the AI translates the whole CV into a new language
+  file. Translations preserve your name, contacts, links, dates, company and
+  institution names, and technical skills/tags verbatim — only prose (summary,
+  titles, responsibilities, descriptions, section headings) is translated. A new
+  language lands as a **draft** marked _Needs review_ (a dot on its button);
+  click **Mark reviewed** when you're happy. If you later change the source CV,
+  dependent translations are flagged _Source changed_ so you can **Refresh** them
+  in one click (the previous version is saved to history first).
+- **Source versions & history** — in **Languages**, _Save current as source
+  version_ records a trusted, reviewed snapshot of the active language. Every AI
+  action (translate, tailor) and manual snapshot is kept in a per-language
+  **History** list you can restore from or delete. This is what makes AI edits
+  safe: nothing is silently overwritten.
 - **Tailor to a job** — in edit mode, the _Tailor_ button opens a panel where you
   paste a job description (text or a URL) and let an AI **rewrite your CV for that
   role** and **draft a cover letter**. Tailoring rewrites your summary, reorders
   skills, and rephrases experience bullets using only facts already in your CV —
   it never invents employers, dates, or skills, and never touches your contact
   details, theme, or hidden sections. It applies in place and is undoable (`⌘Z`),
-  and a `before-tailor-…` snapshot is saved first as a safety net. The cover
-  letter streams in and can be copied or downloaded as `.md` (it is not stored in
-  the CV). See [AI setup](#ai-setup) below.
+  and a restore point is saved to **History** first (and offered as a one-click
+  _Restore previous version_). The cover letter streams in and can be copied or
+  downloaded as `.md` (it is not stored in the CV). See
+  [AI setup](#ai-setup) below.
 
 ## AI setup
 
-The tailoring feature is **optional** and runs through the same local Node
-middleware as the rest of the app, so your API key stays on your machine and
-never reaches the browser. It uses the [Vercel AI SDK](https://sdk.vercel.ai/)
-with [OpenRouter](https://openrouter.ai/) — one key, many models.
+The AI features (job tailoring **and** language translation) are **optional**
+and run through the same local Node middleware as the rest of the app, so your
+API key stays on your machine and never reaches the browser. They use the
+[Vercel AI SDK](https://sdk.vercel.ai/) with [OpenRouter](https://openrouter.ai/)
+— one key, many models. For translation quality, a stronger model
+(`OPENROUTER_MODEL`) generally helps, especially for less common languages.
 
 ```bash
 cp .env.example .env
@@ -86,10 +103,17 @@ Your **real** CV lives in `data/` (gitignored):
 
 ```
 data/
-  cv.no.json  cv.en.json  cv.es.json   # live documents (per language)
-  versions/<name>.<lang>.json          # named snapshots
+  cv.<lang>.json                       # live documents (one per language)
+  languages.json                       # language registry (labels, review/source state)
+  revisions.json                       # index of structured history (metadata)
+  revisions/<id>.json                  # full snapshots: source / translation / tailor
+  versions/<name>.<lang>.json          # named snapshots (manual "Save version")
   avatar.<ext>                         # profile photo (optional)
 ```
+
+`languages.json` and `revisions/` are created automatically on first run
+(`languages.json` is seeded with the built-in NO / EN / ES). The built-in
+section labels live in [`src/i18n/languages.js`](src/i18n/languages.js).
 
 On first run, missing files are created from the sample seed in
 [`public/data/`](public/data/) (e.g. [`data.en.json`](public/data/data.en.json)).
@@ -103,8 +127,9 @@ as usual — nothing personal is pushed to GitHub.
 Vite + React 19 + Tailwind v4. State and undo/redo via `zustand` + `zundo`,
 nested edits via `immer`, file persistence via `lowdb`, drag-to-reorder via
 `@dnd-kit`, and client-side PDF via `html-to-image` + `jspdf`. Optional AI
-tailoring uses the Vercel AI SDK (`ai`) via OpenRouter, with `zod`-validated
-structured output.
+tailoring and language translation use the Vercel AI SDK (`ai`) via OpenRouter,
+with `zod`-validated structured output. The language registry and structured
+revision history are plain JSON files written by the local API.
 
 ## License
 

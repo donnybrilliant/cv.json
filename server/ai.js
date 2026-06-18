@@ -8,8 +8,11 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateObject, streamText } from "ai";
 import { z } from "zod";
-
-const LANG_NAMES = { no: "Norwegian", en: "English", es: "Spanish" };
+import {
+  englishName,
+  DEFAULT_LABELS,
+  resolveLabels,
+} from "../src/i18n/languages.js";
 
 // Resolve the configured model lazily so a missing key only errors when the
 // feature is actually used (not at server boot).
@@ -105,7 +108,7 @@ Produce a complete, ready-to-send cover letter in Markdown. Keep it to roughly 3
 }
 
 function languageName(lang) {
-  return LANG_NAMES[lang] || "English";
+  return englishName(lang) || "English";
 }
 
 // Drop undefined keys so a merge never blanks a field the model omitted.
@@ -144,6 +147,93 @@ export async function tailorCv({ env, doc, jobText, lang }) {
     theme: doc.theme, // never let the model touch styling
     hiddenSections: doc.hiddenSections, // or section visibility
   };
+}
+
+// === Translation =========================================================
+// Translating a CV regenerates a parallel document in a new language. We never
+// trust the model with structure or protected facts: it returns a same-shaped
+// JSON, but we rebuild the result by walking the ORIGINAL document and taking
+// translated *prose* only — identity, contacts, URLs, dates, org names and
+// technical terms are always copied verbatim from the source.
+
+// Leaf field names that must never be translated (proper nouns / machine data).
+const KEEP_LEAF = new Set([
+  "name",
+  "company",
+  "institution",
+  "provider",
+  "url",
+  "mapUrl",
+  "link",
+  "email",
+  "phone",
+  "year",
+  "period",
+  "icon",
+  "id",
+  "placement",
+  "city",
+]);
+
+// Array fields kept verbatim (skills + tech tags are language-neutral).
+const KEEP_PARENT = new Set(["skills", "tags"]);
+
+// Merge translated text onto the original structure. Iterating the original
+// guarantees the shape, key set, and protected values are preserved no matter
+// what the model returns.
+function applyTranslation(original, translated, key) {
+  if (KEEP_LEAF.has(key)) return original;
+  if (typeof original === "string") {
+    return typeof translated === "string" && translated.trim()
+      ? translated
+      : original;
+  }
+  if (Array.isArray(original)) {
+    if (KEEP_PARENT.has(key)) return original;
+    if (!Array.isArray(translated)) return original;
+    return original.map((item, i) => applyTranslation(item, translated[i], key));
+  }
+  if (original && typeof original === "object") {
+    const out = {};
+    const t = translated && typeof translated === "object" ? translated : {};
+    for (const k of Object.keys(original)) {
+      out[k] = applyTranslation(original[k], t[k], k);
+    }
+    return out;
+  }
+  return original;
+}
+
+const TRANSLATE_SYSTEM = `You are a professional CV/resume translator. You translate a candidate's CV from one language to another while keeping it natural and idiomatic for a native reader of the target language.
+
+Hard rules — never break these:
+- Preserve the JSON structure exactly: same keys, same array lengths, same order.
+- Do NOT translate or alter: personal names, company names, institution names, certificate providers, email, phone, URLs, links, map URLs, dates, periods, years, and icon/id fields.
+- Keep technical skills and technology tags in their original form (e.g. "JavaScript", "React", "SQL").
+- Translate prose naturally: the summary/bio, job titles and positions, responsibility bullet points, project descriptions, degree names, employment types, spoken-language names and proficiency levels, and section headings.
+- Never invent, add, or drop content. Translate meaning, not word-for-word.`;
+
+// Translate a full CV document to `targetLang`. Returns the rebuilt document
+// plus translated UI section labels. Pure (no disk writes).
+export async function translateCv({ env, doc, sourceLang, targetLang }) {
+  const { object } = await generateObject({
+    model: getModel(env),
+    output: "no-schema",
+    system: TRANSLATE_SYSTEM,
+    prompt:
+      `Source language: ${languageName(sourceLang)}\n` +
+      `Target language: ${languageName(targetLang)}\n\n` +
+      `Return a JSON object with exactly two keys:\n` +
+      `  "doc": the input CV with all translatable prose translated to the target language (same structure),\n` +
+      `  "labels": the UI section headings below, translated to the target language.\n\n` +
+      `=== UI LABELS (English) ===\n${JSON.stringify(DEFAULT_LABELS, null, 2)}\n\n` +
+      `=== INPUT CV (JSON) ===\n${JSON.stringify(doc, null, 2)}`,
+  });
+
+  const modelDoc = object?.doc && typeof object.doc === "object" ? object.doc : object;
+  const translatedDoc = applyTranslation(doc, modelDoc, "");
+  const labels = resolveLabels(object?.labels);
+  return { doc: translatedDoc, labels };
 }
 
 // Stream a cover letter. Returns the streamText result; the caller pipes

@@ -21,10 +21,10 @@ import {
 import { useCvStore } from "../store/cvStore";
 import * as api from "../api/client";
 import { CUSTOM_THEME, THEMES, THEME_KEYS, isLightColor, themeIconColor } from "../themes";
+import { nativeName } from "../i18n/languages";
 import { exportNodeToPdf } from "../lib/exportPdf";
 import JobTailor from "./JobTailor";
-
-const LANGUAGES = ["no", "en", "es"];
+import LanguageManager from "./LanguageManager";
 
 // Per-CV color theme picker (edit mode only).
 function ThemePicker() {
@@ -207,6 +207,7 @@ function VersionsMenu() {
 export default function Toolbar({ labels }) {
   const lang = useCvStore((s) => s.lang);
   const setLang = useCvStore((s) => s.setLang);
+  const languages = useCvStore((s) => s.languages);
   const editMode = useCvStore((s) => s.editMode);
   const toggleEdit = useCvStore((s) => s.toggleEdit);
   const saveVersion = useCvStore((s) => s.saveVersion);
@@ -343,6 +344,8 @@ export default function Toolbar({ labels }) {
 
           <VersionsMenu />
 
+          <LanguageManager />
+
           <JobTailor />
 
           <ThemePicker />
@@ -370,23 +373,42 @@ export default function Toolbar({ labels }) {
         {editMode ? "View" : "Edit"}
       </button>
 
-      {/* Language switch */}
+      {/* Language switch (dynamic; a dot flags drafts needing review or stale
+          translations whose source has since changed) */}
       <div className="flex rounded shadow overflow-hidden">
-        {LANGUAGES.map((l) => (
-          <button
-            key={l}
-            onClick={() => setLang(l)}
-            className={`px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-              lang === l
-                ? "bg-blue-600 text-white"
-                : "bg-blue-500 text-white/80 hover:bg-blue-600 hover:text-white"
-            }`}
-            title={labels.switchTo[l]}
-            aria-current={lang === l ? "true" : undefined}
-          >
-            {l.toUpperCase()}
-          </button>
-        ))}
+        {languages
+          .filter((l) => l.enabled !== false)
+          .map((l) => {
+            const flag = l.stale || l.reviewStatus === "needs-review";
+            return (
+              <button
+                key={l.code}
+                onClick={() => setLang(l.code)}
+                className={`relative px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                  lang === l.code
+                    ? "bg-blue-600 text-white"
+                    : "bg-blue-500 text-white/80 hover:bg-blue-600 hover:text-white"
+                }`}
+                title={
+                  l.stale
+                    ? `${nativeName(l.code)} — source changed, consider refreshing`
+                    : l.reviewStatus === "needs-review"
+                      ? `${nativeName(l.code)} — needs review`
+                      : nativeName(l.code)
+                }
+                aria-current={lang === l.code ? "true" : undefined}
+              >
+                {l.code.toUpperCase()}
+                {flag && (
+                  <span
+                    className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${
+                      l.stale ? "bg-amber-300" : "bg-white"
+                    }`}
+                  />
+                )}
+              </button>
+            );
+          })}
       </div>
 
       {/* Download PDF (cropped + compressed) */}

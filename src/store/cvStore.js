@@ -83,13 +83,15 @@ export const useCvStore = create()(
     immer((set, get) => ({
       doc: null,
       lang: "no",
+      languages: [], // language registry metadata (code, labels, reviewStatus, stale, …)
       editMode: false,
       saveState: "idle", // idle | saving | saved | error
       loading: true,
       avatarVersion: 0, // bumped after avatar upload to bust the image cache (UI-only)
       avatarExists: false,
-      aiStatus: "idle", // idle | tailoring | error (UI-only)
+      aiStatus: "idle", // idle | tailoring | translating | error (UI-only)
       aiError: null,
+      lastTailorBackup: null, // revision id of the pre-tailor snapshot (UI-only)
 
       clearAiState: () =>
         set((d) => {
@@ -123,6 +125,10 @@ export const useCvStore = create()(
           d.doc = doc;
           d.lang = lang;
           d.loading = false;
+          // Backups are per-language; drop the pre-tailor restore point so the
+          // JobTailor "Restore previous version" button can't apply another
+          // language's snapshot to this document.
+          d.lastTailorBackup = null;
         });
         try {
           const meta = await api.avatarExists();
@@ -141,6 +147,76 @@ export const useCvStore = create()(
       setLang: (lang) => {
         if (lang === get().lang) return;
         get().load(lang);
+      },
+
+      // Load the language registry (metadata + staleness). Not undoable.
+      loadLanguages: async () => {
+        const langs = await api.listLanguages();
+        set((d) => {
+          d.languages = langs;
+        });
+        return langs;
+      },
+
+      // --- languages: create / refresh / review / remove ---
+      // Generate a new language (or refresh an existing one) by AI-translating
+      // from a source language, then switch to it for review.
+      createLanguage: async (targetCode, sourceLang, overwrite = false) => {
+        set((d) => {
+          d.aiStatus = "translating";
+          d.aiError = null;
+        });
+        try {
+          await api.translateLanguage(sourceLang, targetCode, overwrite);
+          await get().loadLanguages();
+          await get().load(targetCode); // force-load the freshly written doc
+          set((d) => {
+            d.aiStatus = "idle";
+          });
+        } catch (e) {
+          set((d) => {
+            d.aiStatus = "error";
+            d.aiError = String(e?.message || e);
+          });
+          throw e;
+        }
+      },
+
+      markReviewed: async (code) => {
+        await api.patchLanguage(code, { reviewStatus: "reviewed" });
+        await get().loadLanguages();
+      },
+
+      removeLanguage: async (code) => {
+        await api.deleteLanguage(code);
+        const langs = await get().loadLanguages();
+        if (get().lang === code) {
+          const fallback = langs.find((l) => l.enabled !== false)?.code || "en";
+          await get().load(fallback);
+        }
+      },
+
+      // --- source versions & revisions ---
+      // Save the current document as a reviewed "source" revision and mark the
+      // active language reviewed. This is the trusted baseline for translations.
+      saveSourceVersion: async (label) => {
+        const { lang, doc } = get();
+        const rev = await api.createRevision({
+          lang,
+          kind: "source",
+          label: label || "Source version",
+          doc,
+        });
+        await api.patchLanguage(lang, { reviewStatus: "reviewed" });
+        await get().loadLanguages();
+        return rev;
+      },
+
+      // Restore a revision's document into the active doc (undoable + autosaves).
+      restoreRevision: async (id) => {
+        const rev = await api.getRevision(id);
+        if (rev?.doc) get().replaceDoc(rev.doc);
+        return rev;
       },
 
       // --- path-based editing actions (path is an array, e.g. ["personalInfo","bio"]) ---
@@ -257,13 +333,36 @@ export const useCvStore = create()(
         });
         try {
           const { lang, doc } = get();
-          const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
-          // Best-effort safety net; don't block tailoring if it fails.
-          await api.createVersion(`before-tailor-${stamp}`, lang, doc).catch(() => {});
+          // Structured safety net: snapshot the current doc as a restorable
+          // revision before applying. Don't block tailoring if it fails.
+          let backupId = null;
+          try {
+            const rev = await api.createRevision({
+              lang,
+              kind: "tailor-before",
+              label: "Before tailoring",
+              doc,
+            });
+            backupId = rev?.id || null;
+          } catch {
+            /* non-fatal */
+          }
           const tailored = await api.tailorCv(lang, doc, job);
           get().replaceDoc(tailored); // undoable + autosaves to disk
+          // Record the tailored result so it appears in history.
+          try {
+            await api.createRevision({
+              lang,
+              kind: "tailor-after",
+              label: "Tailored to job",
+              doc: tailored,
+            });
+          } catch {
+            /* non-fatal */
+          }
           set((d) => {
             d.aiStatus = "idle";
+            d.lastTailorBackup = backupId;
           });
         } catch (e) {
           set((d) => {

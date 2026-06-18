@@ -13,6 +13,48 @@ export const putCv = (lang, doc) =>
     body: JSON.stringify(doc),
   }).then(json);
 
+// --- languages registry ---------------------------------------------------
+export const listLanguages = () => fetch("/api/languages").then(json);
+
+export const patchLanguage = (code, patch) =>
+  fetch(`/api/languages/${code}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  }).then(json);
+
+export const deleteLanguage = (code) =>
+  fetch(`/api/languages/${code}`, { method: "DELETE" }).then(json);
+
+// AI: generate (or refresh) a language by translating from a source language.
+export const translateLanguage = (sourceLang, targetLang, overwrite = false) =>
+  fetch("/api/ai/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceLang, targetLang, overwrite }),
+  }).then(json);
+
+// --- revisions (structured source/AI history) -----------------------------
+export const listRevisions = (lang) =>
+  fetch(`/api/revisions${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`).then(
+    json
+  );
+
+export const createRevision = (payload) =>
+  fetch("/api/revisions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).then(json);
+
+export const getRevision = (id) =>
+  fetch(`/api/revisions/${encodeURIComponent(id)}`).then(json);
+
+export const deleteRevision = (id) =>
+  fetch(`/api/revisions/${encodeURIComponent(id)}`, { method: "DELETE" }).then(
+    json
+  );
+
 export const listVersions = () => fetch("/api/versions").then(json);
 
 export const createVersion = (name, lang, doc) =>
@@ -72,6 +114,13 @@ export const uploadAvatar = (dataUrl) =>
 
 export const deleteAvatar = () =>
   fetch("/api/avatar", { method: "DELETE" }).then(json);
+
+// Whether a custom avatar is stored on disk. GET /api/avatar returns the image
+// (200) or 404 when none exists; we only need the status, not the bytes.
+export const avatarExists = () =>
+  fetch("/api/avatar", { method: "GET" })
+    .then((res) => ({ exists: res.ok }))
+    .catch(() => ({ exists: false }));
 
 // URL for the current avatar; `v` busts the browser cache after a change.
 export const avatarUrl = (v) => `/api/avatar?v=${v}`;
