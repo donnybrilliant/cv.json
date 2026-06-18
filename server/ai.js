@@ -537,8 +537,10 @@ const KEEP_LEAF = new Set([
   "city",
 ]);
 
-// Array fields kept verbatim (skills + tech tags are language-neutral).
-const KEEP_PARENT = new Set(["skills", "tags"]);
+// Array fields kept verbatim: skills + tech tags are language-neutral, and
+// contact `links` carry user-set url+label pairs that must not be altered
+// (the per-item `label`, unlike `url`, is otherwise not protected by KEEP_LEAF).
+const KEEP_PARENT = new Set(["skills", "tags", "links"]);
 
 // Merge translated text onto the original structure. Iterating the original
 // guarantees the shape, key set, and protected values are preserved no matter
