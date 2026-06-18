@@ -46,6 +46,12 @@ export default [
     },
     rules: {
       ...js.configs.recommended.rules,
+      // Allow deliberate "destructure-to-omit" + `_`-prefixed throwaways
+      // (e.g. `const { experience: _omit, ...rest } = doc`).
+      'no-unused-vars': [
+        'error',
+        { ignoreRestSiblings: true, varsIgnorePattern: '^_', argsIgnorePattern: '^_' },
+      ],
     },
   },
 ]

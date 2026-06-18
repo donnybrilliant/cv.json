@@ -84,6 +84,7 @@ export const useCvStore = create()(
       doc: null,
       lang: "no",
       languages: [], // language registry metadata (code, labels, reviewStatus, stale, …)
+      cvSource: null, // debug label: data/cv.{lang}.json or data/versions/{name}.{lang}.json
       editMode: false,
       saveState: "idle", // idle | saving | saved | error
       loading: true,
@@ -124,6 +125,7 @@ export const useCvStore = create()(
         set((d) => {
           d.doc = doc;
           d.lang = lang;
+          d.cvSource = `data/cv.${lang}.json`;
           d.loading = false;
           // Backups are per-language; drop the pre-tailor restore point so the
           // JobTailor "Restore previous version" button can't apply another
@@ -321,18 +323,22 @@ export const useCvStore = create()(
         const { lang } = get();
         const doc = await api.getVersion(name, lang);
         get().replaceDoc(doc); // undoable
+        set((d) => {
+          d.cvSource = `data/versions/${name}.${lang}.json`;
+        });
       },
 
       // --- AI: tailor the whole CV to a job posting ---
       // Applies immediately (per design); a safety snapshot is saved first and
-      // the change is undoable via ⌘Z. `job` is { text } or { url }.
-      aiTailor: async (job) => {
+      // the change is undoable via ⌘Z. `job` is { text } or { url }; `opts` may
+      // carry { extraContext, research }.
+      aiTailor: async (job, opts = {}) => {
         set((d) => {
           d.aiStatus = "tailoring";
           d.aiError = null;
         });
         try {
-          const { lang, doc } = get();
+          const { lang, doc, cvSource } = get();
           // Structured safety net: snapshot the current doc as a restorable
           // revision before applying. Don't block tailoring if it fails.
           let backupId = null;
@@ -347,7 +353,7 @@ export const useCvStore = create()(
           } catch {
             /* non-fatal */
           }
-          const tailored = await api.tailorCv(lang, doc, job);
+          const tailored = await api.tailorCv(lang, doc, job, { ...opts, cvSource });
           get().replaceDoc(tailored); // undoable + autosaves to disk
           // Record the tailored result so it appears in history.
           try {

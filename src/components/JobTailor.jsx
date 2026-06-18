@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles,
   X,
@@ -23,15 +23,19 @@ export default function JobTailor() {
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [tone, setTone] = useState("professional and warm");
+  const [extraContext, setExtraContext] = useState("");
+  const [research, setResearch] = useState(false);
 
   const [letter, setLetter] = useState("");
   const [writing, setWriting] = useState(false);
   const [tailored, setTailored] = useState(false); // show "updated — ⌘Z to undo"
   const [copied, setCopied] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const letterRef = useRef(null);
 
   const lang = useCvStore((s) => s.lang);
   const doc = useCvStore((s) => s.doc);
+  const cvSource = useCvStore((s) => s.cvSource);
   const aiTailor = useCvStore((s) => s.aiTailor);
   const aiStatus = useCvStore((s) => s.aiStatus);
   const aiError = useCvStore((s) => s.aiError);
@@ -61,6 +65,14 @@ export default function JobTailor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, closeDrawer]);
 
+  // Grow the cover letter field to fit its content; the drawer panel scrolls.
+  useEffect(() => {
+    const el = letterRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [letter, writing]);
+
   const hasInput = mode === "text" ? text.trim().length > 0 : url.trim().length > 0;
   const job = () => (mode === "text" ? { text } : { url });
 
@@ -68,7 +80,7 @@ export default function JobTailor() {
     setLocalError(null);
     setTailored(false);
     try {
-      await aiTailor(job());
+      await aiTailor(job(), { extraContext, research });
       setTailored(true);
     } catch {
       /* error surfaced via aiError */
@@ -80,7 +92,13 @@ export default function JobTailor() {
     setWriting(true);
     setLetter("");
     try {
-      await api.coverLetter(lang, doc, job(), tone, setLetter);
+      await api.coverLetter(
+        lang,
+        doc,
+        job(),
+        { tone, extraContext, research, cvSource: cvSource || `data/cv.${lang}.json` },
+        setLetter,
+      );
     } catch (e) {
       setLocalError(String(e?.message || e));
     } finally {
@@ -174,11 +192,47 @@ export default function JobTailor() {
                     className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-xs text-gray-400">
-                    Works for simple postings. JS-heavy boards (LinkedIn, some
-                    Workday/Greenhouse pages) may not extract — paste the text instead.
+                    Tries a direct fetch first, then a JS-rendering reader so
+                    JS-heavy boards (LinkedIn, Workday, Greenhouse) usually work
+                    too. If extraction still comes up short, paste the text instead.
                   </p>
                 </div>
               )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-gray-500">
+                  Extra context to emphasize{" "}
+                  <span className="font-normal text-gray-400">
+                    (used for both CV &amp; cover letter)
+                  </span>
+                </label>
+                <textarea
+                  value={extraContext}
+                  onChange={(e) => setExtraContext(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. Lots of hands-on experience with Raspberry Pi, ESP32 and sensors; gardening / outdoor maintenance background — relevant to this role."
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                />
+                <p className="text-xs text-gray-400">
+                  Treated as additional true facts about you the AI may weave in.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={research}
+                  onChange={(e) => setResearch(e.target.checked)}
+                  className="mt-0.5 cursor-pointer"
+                />
+                <span>
+                  Research the company online
+                  <span className="block text-xs text-gray-400">
+                    Looks up the employer + their website to ground the tailoring
+                    and letter. Sends the posting to an external reader; a bit slower.
+                  </span>
+                </span>
+              </label>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-gray-500">Cover letter tone</label>
@@ -244,7 +298,10 @@ export default function JobTailor() {
               {(letter || writing) && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700">Cover letter</h3>
+                    <h3 className="text-sm font-semibold text-gray-700">
+                      Cover letter{" "}
+                      <span className="font-normal text-gray-400">(editable)</span>
+                    </h3>
                     <div className="flex gap-1">
                       <button
                         onClick={onCopy}
@@ -265,10 +322,15 @@ export default function JobTailor() {
                       </button>
                     </div>
                   </div>
-                  <pre className="whitespace-pre-wrap break-words text-sm text-gray-800 bg-gray-50 rounded p-3 font-sans">
-                    {letter}
-                    {writing && <span className="animate-pulse">▍</span>}
-                  </pre>
+                  <textarea
+                    ref={letterRef}
+                    value={writing ? `${letter}▍` : letter}
+                    onChange={(e) => setLetter(e.target.value)}
+                    readOnly={writing}
+                    spellCheck
+                    placeholder="Your cover letter will appear here…"
+                    className="w-full min-h-[6rem] whitespace-pre-wrap break-words text-sm text-gray-800 bg-gray-50 rounded p-3 font-sans border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden"
+                  />
                 </div>
               )}
             </div>
