@@ -8,20 +8,6 @@
 //      UI labels. The live, user-extensible set lives on disk in
 //      data/languages.json (seeded from BUILTINS on first run).
 
-// The UI strings that must exist per language (section headings + print button).
-// `switchTo` is intentionally NOT here — language button tooltips derive their
-// name from the catalog so every dynamically added language works for free.
-export const LABEL_KEYS = [
-  "contact",
-  "education",
-  "skills",
-  "certifications",
-  "languages",
-  "workExperience",
-  "projects",
-  "print",
-];
-
 // English labels, used as the fallback whenever a language is missing a key.
 export const DEFAULT_LABELS = {
   contact: "Contact",
@@ -129,5 +115,3 @@ export const BUILTIN_LANGUAGES = [
     },
   },
 ];
-
-export const BUILTIN_CODES = BUILTIN_LANGUAGES.map((l) => l.code);

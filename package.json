@@ -22,7 +22,6 @@
     "html-to-image": "^1.11.13",
     "immer": "^11.1.8",
     "jspdf": "^4.2.1",
-    "lowdb": "^7.0.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

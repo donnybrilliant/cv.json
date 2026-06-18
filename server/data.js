@@ -13,7 +13,7 @@ import { BUILTIN_LANGUAGES, catalogEntry } from "../src/i18n/languages.js";
 
 const ROOT = process.cwd();
 export const DATA_DIR = path.join(ROOT, "data");
-export const VERSIONS_DIR = path.join(DATA_DIR, "versions");
+const VERSIONS_DIR = path.join(DATA_DIR, "versions");
 // Seed source: the original read-only sample data shipped with the app.
 const SEED_DIR = path.join(ROOT, "public", "data");
 
