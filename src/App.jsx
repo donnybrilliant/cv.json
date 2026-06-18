@@ -9,6 +9,7 @@ import Experience from "./components/Experience";
 import Projects from "./components/Projects";
 import CustomSections from "./components/CustomSections";
 import Editable from "./components/Editable";
+import RowControls from "./components/RowControls";
 
 function Header() {
   const doc = useCvStore((s) => s.doc);
@@ -16,6 +17,7 @@ function Header() {
   const setField = useCvStore((s) => s.setField);
   const addItem = useCvStore((s) => s.addItem);
   const removeItem = useCvStore((s) => s.removeItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const titles = doc.personalInfo.titles;
   const [idx, setIdx] = useState(0);
@@ -76,13 +78,19 @@ function Header() {
         </div>
       )}
 
-      <Editable
-        as="div"
-        multiline
-        className="text-sm opacity-90 mt-5 whitespace-pre-line w-full"
-        value={doc.personalInfo.bio}
-        onChange={(v) => setField(["personalInfo", "bio"], v)}
-      />
+      <div className="relative group/bio pr-12">
+        <Editable
+          as="div"
+          multiline
+          className="text-sm opacity-90 mt-5 whitespace-pre-line w-full"
+          value={doc.personalInfo.bio}
+          onChange={(v) => setField(["personalInfo", "bio"], v)}
+        />
+        <RowControls
+          group="bio"
+          onAi={() => aiImproveTarget({ path: ["personalInfo", "bio"] })}
+        />
+      </div>
     </header>
   );
 }

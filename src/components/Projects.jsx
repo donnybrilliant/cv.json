@@ -60,6 +60,7 @@ export default function Projects({ labels }) {
   const addItem = useCvStore((s) => s.addItem);
   const removeItem = useCvStore((s) => s.removeItem);
   const moveItem = useCvStore((s) => s.moveItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const projects = doc.projects || [];
   const ids = projects.map((_, i) => `project-${i}`);
@@ -131,6 +132,7 @@ export default function Projects({ labels }) {
               <Tags projectIndex={i} tags={p.tags || []} />
               <RowControls
                 group="exp"
+                onAi={() => aiImproveTarget({ path: ["projects", i] })}
                 onUp={() => moveItem(["projects"], i, i - 1)}
                 onDown={() => moveItem(["projects"], i, i + 1)}
                 onRemove={() => removeItem(["projects"], i)}

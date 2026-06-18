@@ -9,12 +9,13 @@ import { SortableList, SortableItem } from "./Sortable";
 const ICON = "text-[var(--cv-icon)]";
 
 // Editable, sortable list of bullet points under an entry.
-function Bullets({ path, items }) {
+function Bullets({ path, items, allowAi = false }) {
   const editMode = useCvStore((s) => s.editMode);
   const setField = useCvStore((s) => s.setField);
   const addItem = useCvStore((s) => s.addItem);
   const removeItem = useCvStore((s) => s.removeItem);
   const moveItem = useCvStore((s) => s.moveItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   if (!items.length && !editMode) return null;
 
@@ -30,6 +31,7 @@ function Bullets({ path, items }) {
               <Editable multiline value={b} onChange={(v) => setField([...path, i], v)} />
               <RowControls
                 group="bullet"
+                onAi={allowAi ? () => aiImproveTarget({ path: [...path, i] }) : undefined}
                 onUp={() => moveItem(path, i, i - 1)}
                 onDown={() => moveItem(path, i, i + 1)}
                 onRemove={() => removeItem(path, i)}
@@ -51,11 +53,12 @@ function Bullets({ path, items }) {
 }
 
 // One entry: title (optionally a link) + subtitle + period + bullets.
-function Entry({ basePath, index, item, compact }) {
+function Entry({ basePath, index, item, compact, allowAi = false }) {
   const editMode = useCvStore((s) => s.editMode);
   const setField = useCvStore((s) => s.setField);
   const moveItem = useCvStore((s) => s.moveItem);
   const removeItem = useCvStore((s) => s.removeItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const path = [...basePath, "items", index];
   const titleCls = compact ? "font-semibold text-sm" : "font-semibold text-lg";
@@ -96,13 +99,14 @@ function Entry({ basePath, index, item, compact }) {
 
         <RowControls
           group="item"
+          onAi={allowAi ? () => aiImproveTarget({ path }) : undefined}
           onUp={() => moveItem([...basePath, "items"], index, index - 1)}
           onDown={() => moveItem([...basePath, "items"], index, index + 1)}
           onRemove={() => removeItem([...basePath, "items"], index)}
         />
       </div>
 
-      <Bullets path={[...path, "bullets"]} items={item.bullets || []} />
+      <Bullets path={[...path, "bullets"]} items={item.bullets || []} allowAi={allowAi} />
     </SortableItem>
   );
 }
@@ -119,10 +123,12 @@ export default function CustomSection({ index, pos, count, section, compact, onR
   const setField = useCvStore((s) => s.setField);
   const moveItem = useCvStore((s) => s.moveItem);
   const addItem = useCvStore((s) => s.addItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const base = ["customSections", index];
   const items = section.items || [];
   const itemIds = items.map((_, i) => `${base.join(".")}-item-${i}`);
+  const allowAi = !compact;
 
   return (
     <div className={`${compact ? "mb-6" : "mb-8"} ${hidden ? "opacity-40 print:hidden" : ""}`}>
@@ -154,6 +160,7 @@ export default function CustomSection({ index, pos, count, section, compact, onR
         )}
         <RowControls
           group="exp"
+          onAi={allowAi ? () => aiImproveTarget({ path: base }) : undefined}
           onUp={() => pos > 0 && onReorder(pos, pos - 1)}
           onDown={() => pos < count - 1 && onReorder(pos, pos + 1)}
           onRemove={() => removeCustomSection(index)}
@@ -162,7 +169,7 @@ export default function CustomSection({ index, pos, count, section, compact, onR
 
       <SortableList ids={itemIds} onReorder={(f, t) => moveItem([...base, "items"], f, t)}>
         {items.map((item, i) => (
-          <Entry key={itemIds[i]} basePath={base} index={i} item={item} compact={compact} />
+          <Entry key={itemIds[i]} basePath={base} index={i} item={item} compact={compact} allowAi={allowAi} />
         ))}
       </SortableList>
 

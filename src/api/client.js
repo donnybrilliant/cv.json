@@ -64,6 +64,15 @@ export const tailorCv = (lang, doc, job, opts = {}) =>
     body: JSON.stringify({ lang, doc, job, ...opts }),
   }).then(json);
 
+// AI: improve one editable main-content target (bio, bullet, experience item,
+// project, or main custom-section content). Returns the full updated document.
+export const improveInline = (lang, doc, target, opts = {}) =>
+  fetch("/api/ai/inline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lang, doc, target, ...opts }),
+  }).then(json);
+
 // AI: stream a cover letter. Calls `onChunk(textSoFar)` as text arrives and
 // resolves with the full letter. `job` is { text } or { url }; `opts` may carry
 // { tone, extraContext, research, cvSource }.

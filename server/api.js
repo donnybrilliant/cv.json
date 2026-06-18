@@ -14,6 +14,7 @@ import {
   isDebug,
   debugLevel,
 } from "./ai.js";
+import { improveInlineTarget } from "./inline-ai.js";
 import {
   DATA_DIR,
   ensureReady,
@@ -422,12 +423,24 @@ export function cvApiMiddleware(env = process.env) {
           return send(res, 200, { ok: true, ...result });
         }
 
-        const { doc, lang, job, tone, extraContext, research, cvSource } =
+        const { doc, lang, job, tone, extraContext, research, cvSource, target } =
           await readBody(req);
         if (!doc || typeof doc !== "object")
           return send(res, 400, { error: "missing cv document" });
         if (!isCatalogLang(lang))
           return send(res, 400, { error: "unknown language" });
+
+        if (parts[2] === "inline") {
+          const improved = await improveInlineTarget({
+            env,
+            doc,
+            lang,
+            target,
+            cvSource,
+          });
+          return send(res, 200, improved);
+        }
+
         const jobText = await resolveJobText(job, env);
         const companyInfo = research
           ? await getCompanyInfo({ env, jobText })

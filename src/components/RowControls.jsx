@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/refs -- dnd-kit's drag handle requires spreading
    its listeners/attributes and passing setActivatorNodeRef during render. */
-import { Plus, Trash2, ChevronUp, ChevronDown, GripVertical } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, ChevronUp, ChevronDown, GripVertical, Sparkles, Loader2 } from "lucide-react";
 import { useCvStore } from "../store/cvStore";
 import { useDragHandle } from "./Sortable";
 
@@ -11,6 +12,7 @@ const VISIBILITY = {
   bullet: "group-hover/bullet:opacity-100 group-focus-within/bullet:opacity-100",
   role: "group-hover/role:opacity-100 group-focus-within/role:opacity-100",
   exp: "group-hover/exp:opacity-100 group-focus-within/exp:opacity-100",
+  bio: "group-hover/bio:opacity-100 group-focus-within/bio:opacity-100",
 };
 
 // Hover-revealed controls for a single item in an editable list.
@@ -22,15 +24,30 @@ export default function RowControls({
   onDown,
   onRemove,
   onAdd,
+  onAi,
   group = "item",
   className = "",
 }) {
+  const [aiBusy, setAiBusy] = useState(false);
   const editMode = useCvStore((s) => s.editMode);
   const handle = useDragHandle();
   if (!editMode) return null;
 
   const btn =
     "p-1 rounded bg-white/90 shadow ring-1 ring-gray-200 text-gray-600 hover:text-blue-700 hover:ring-blue-300 disabled:opacity-30 disabled:cursor-default cursor-pointer";
+
+  const runAi = async (e) => {
+    e.stopPropagation();
+    if (!onAi || aiBusy) return;
+    setAiBusy(true);
+    try {
+      await onAi();
+    } catch (err) {
+      window.alert(`AI rewrite failed: ${String(err?.message || err)}`);
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   return (
     <div
@@ -49,26 +66,44 @@ export default function RowControls({
           <GripVertical className="w-3.5 h-3.5" />
         </button>
       )}
-      <button type="button" className={btn} onClick={onUp} title="Move up" aria-label="Move up">
-        <ChevronUp className="w-3.5 h-3.5" />
-      </button>
-      <button type="button" className={btn} onClick={onDown} title="Move down" aria-label="Move down">
-        <ChevronDown className="w-3.5 h-3.5" />
-      </button>
+      {onAi && (
+        <button
+          type="button"
+          className={`${btn} hover:text-violet-700 hover:ring-violet-300`}
+          onClick={runAi}
+          disabled={aiBusy}
+          title="Improve with AI"
+          aria-label="Improve with AI"
+        >
+          {aiBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+        </button>
+      )}
+      {onUp && (
+        <button type="button" className={btn} onClick={onUp} title="Move up" aria-label="Move up">
+          <ChevronUp className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {onDown && (
+        <button type="button" className={btn} onClick={onDown} title="Move down" aria-label="Move down">
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+      )}
       {onAdd && (
         <button type="button" className={btn} onClick={onAdd} title="Add below" aria-label="Add below">
           <Plus className="w-3.5 h-3.5" />
         </button>
       )}
-      <button
-        type="button"
-        className={`${btn} hover:text-red-600 hover:ring-red-300`}
-        onClick={onRemove}
-        title="Remove"
-        aria-label="Remove"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      {onRemove && (
+        <button
+          type="button"
+          className={`${btn} hover:text-red-600 hover:ring-red-300`}
+          onClick={onRemove}
+          title="Remove"
+          aria-label="Remove"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }

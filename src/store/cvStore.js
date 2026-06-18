@@ -91,7 +91,7 @@ export const useCvStore = create()(
       loading: true,
       avatarVersion: 0, // bumped after avatar upload to bust the image cache (UI-only)
       avatarExists: false,
-      aiStatus: "idle", // idle | tailoring | translating | error (UI-only)
+      aiStatus: "idle", // idle | tailoring | translating | rewriting | error (UI-only)
       aiError: null,
 
       clearAiState: () =>
@@ -352,6 +352,32 @@ export const useCvStore = create()(
           const cvSource = `versions/${versionId}/cv.${lang}.json`;
           const tailored = await api.tailorCv(lang, doc, job, { ...opts, cvSource });
           get().replaceDoc(tailored); // undoable + autosaves to disk
+          set((d) => {
+            d.aiStatus = "idle";
+          });
+        } catch (e) {
+          set((d) => {
+            d.aiStatus = "error";
+            d.aiError = String(e?.message || e);
+          });
+          throw e;
+        }
+      },
+
+      // --- AI: improve one hovered main-content target ---
+      // The server applies a guarded merge, so protected fields (company, dates,
+      // type, links/sidebar content) cannot be changed even if the model returns
+      // them. The full doc replacement is undoable via the existing history.
+      aiImproveTarget: async (target) => {
+        set((d) => {
+          d.aiStatus = "rewriting";
+          d.aiError = null;
+        });
+        try {
+          const { versionId, lang, doc } = get();
+          const cvSource = `versions/${versionId}/cv.${lang}.json`;
+          const improved = await api.improveInline(lang, doc, target, { cvSource });
+          get().replaceDoc(improved);
           set((d) => {
             d.aiStatus = "idle";
           });

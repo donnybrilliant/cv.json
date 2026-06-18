@@ -50,6 +50,7 @@ function Responsibilities({ path, items }) {
   const addItem = useCvStore((s) => s.addItem);
   const removeItem = useCvStore((s) => s.removeItem);
   const moveItem = useCvStore((s) => s.moveItem);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const prefix = path.join(".");
   const ids = items.map((_, i) => `${prefix}-${i}`);
@@ -63,6 +64,7 @@ function Responsibilities({ path, items }) {
               <Editable multiline value={resp} onChange={(v) => setField([...path, i], v)} />
               <RowControls
                 group="bullet"
+                onAi={() => aiImproveTarget({ path: [...path, i] })}
                 onUp={() => moveItem(path, i, i - 1)}
                 onDown={() => moveItem(path, i, i + 1)}
                 onRemove={() => removeItem(path, i)}
@@ -85,6 +87,7 @@ export default function Experience({ labels }) {
   const removeItem = useCvStore((s) => s.removeItem);
   const moveItem = useCvStore((s) => s.moveItem);
   const editMode = useCvStore((s) => s.editMode);
+  const aiImproveTarget = useCvStore((s) => s.aiImproveTarget);
 
   const experience = doc.experience;
   const expIds = experience.map((_, i) => `exp-${i}`);
@@ -145,7 +148,13 @@ export default function Experience({ labels }) {
                     )}
                   </div>
                 )}
-                <RowControls group="exp" onUp={() => moveItem(["experience"], i, i - 1)} onDown={() => moveItem(["experience"], i, i + 1)} onRemove={() => removeItem(["experience"], i)} />
+                <RowControls
+                  group="exp"
+                  onAi={() => aiImproveTarget({ path: ["experience", i] })}
+                  onUp={() => moveItem(["experience"], i, i - 1)}
+                  onDown={() => moveItem(["experience"], i, i + 1)}
+                  onRemove={() => removeItem(["experience"], i)}
+                />
               </div>
 
               {/* Roles (nested) or flat responsibilities */}
@@ -165,7 +174,13 @@ export default function Experience({ labels }) {
                               </>
                             )}
                           </div>
-                          <RowControls group="role" onUp={() => moveItem(["experience", i, "roles"], ri, ri - 1)} onDown={() => moveItem(["experience", i, "roles"], ri, ri + 1)} onRemove={() => removeItem(["experience", i, "roles"], ri)} />
+                          <RowControls
+                            group="role"
+                            onAi={() => aiImproveTarget({ path: ["experience", i, "roles", ri] })}
+                            onUp={() => moveItem(["experience", i, "roles"], ri, ri - 1)}
+                            onDown={() => moveItem(["experience", i, "roles"], ri, ri + 1)}
+                            onRemove={() => removeItem(["experience", i, "roles"], ri)}
+                          />
                         </div>
                         <Responsibilities path={["experience", i, "roles", ri, "responsibilities"]} items={role.responsibilities} />
                       </SortableItem>
