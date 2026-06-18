@@ -82,9 +82,10 @@ export const useCvStore = create()(
   temporal(
     immer((set, get) => ({
       doc: null,
+      versionId: null, // the version (named CV) currently being edited
       lang: "no",
-      languages: [], // language registry metadata (code, labels, reviewStatus, stale, …)
-      cvSource: null, // debug label: data/cv.{lang}.json or data/versions/{name}.{lang}.json
+      versions: [], // [{ id, name, langs: [code, …] }]
+      languages: [], // language label store: [{ code, builtin, labels }]
       editMode: false,
       saveState: "idle", // idle | saving | saved | error
       loading: true,
@@ -92,7 +93,6 @@ export const useCvStore = create()(
       avatarExists: false,
       aiStatus: "idle", // idle | tailoring | translating | error (UI-only)
       aiError: null,
-      lastTailorBackup: null, // revision id of the pre-tailor snapshot (UI-only)
 
       clearAiState: () =>
         set((d) => {
@@ -115,22 +115,18 @@ export const useCvStore = create()(
           d.editMode = on;
         }),
 
-      // Load a language's doc from disk. Not an undoable step.
-      load: async (lang) => {
+      // Load a version's document for a language. Not an undoable step.
+      load: async (versionId, lang) => {
         set((d) => {
           d.loading = true;
         });
-        const doc = normalizeDoc(await api.getCv(lang));
+        const doc = normalizeDoc(await api.getCv(versionId, lang));
         suppressSave = true;
         set((d) => {
           d.doc = doc;
+          d.versionId = versionId;
           d.lang = lang;
-          d.cvSource = `data/cv.${lang}.json`;
           d.loading = false;
-          // Backups are per-language; drop the pre-tailor restore point so the
-          // JobTailor "Restore previous version" button can't apply another
-          // language's snapshot to this document.
-          d.lastTailorBackup = null;
         });
         try {
           const meta = await api.avatarExists();
@@ -146,12 +142,32 @@ export const useCvStore = create()(
         suppressSave = false;
       },
 
-      setLang: (lang) => {
-        if (lang === get().lang) return;
-        get().load(lang);
+      // Switch to another version, keeping the current language when that
+      // version has it (else falling back to one it does have).
+      switchVersion: async (id) => {
+        if (id === get().versionId) return;
+        const v = get().versions.find((x) => x.id === id);
+        const langs = v?.langs || [];
+        const lang = langs.includes(get().lang) ? get().lang : langs[0] || "en";
+        await get().load(id, lang);
       },
 
-      // Load the language registry (metadata + staleness). Not undoable.
+      // Switch language within the current version.
+      setLang: (lang) => {
+        if (lang === get().lang) return;
+        get().load(get().versionId, lang);
+      },
+
+      // Load the version list. Not undoable.
+      loadVersions: async () => {
+        const versions = await api.listVersions();
+        set((d) => {
+          d.versions = versions;
+        });
+        return versions;
+      },
+
+      // Load the language label store. Not undoable.
       loadLanguages: async () => {
         const langs = await api.listLanguages();
         set((d) => {
@@ -160,18 +176,48 @@ export const useCvStore = create()(
         return langs;
       },
 
-      // --- languages: create / refresh / review / remove ---
-      // Generate a new language (or refresh an existing one) by AI-translating
-      // from a source language, then switch to it for review.
-      createLanguage: async (targetCode, sourceLang, overwrite = false) => {
+      // --- versions: create / duplicate / rename / delete ---
+      createVersion: async (name, fromVersionId = null) => {
+        const v = await api.createVersion(name, fromVersionId);
+        await get().loadVersions();
+        return v;
+      },
+
+      // Copy the current version under a new name (the usual way to spin up a
+      // sector variant, then tailor the copy and leave the original intact).
+      duplicateVersion: async (name) => {
+        const v = await api.createVersion(name, get().versionId);
+        await get().loadVersions();
+        return v;
+      },
+
+      renameVersion: async (id, name) => {
+        await api.renameVersion(id, name);
+        await get().loadVersions();
+      },
+
+      deleteVersion: async (id) => {
+        await api.deleteVersion(id);
+        const versions = await get().loadVersions();
+        if (get().versionId === id && versions[0]) {
+          await get().load(versions[0].id, versions[0].langs[0] || "en");
+        }
+      },
+
+      // --- languages within the current version ---
+      // Translate the current version into a new language (a copy), then switch
+      // to it for review.
+      addTranslation: async (targetLang) => {
         set((d) => {
           d.aiStatus = "translating";
           d.aiError = null;
         });
         try {
-          await api.translateLanguage(sourceLang, targetCode, overwrite);
+          const { versionId, lang } = get();
+          await api.translate(versionId, lang, targetLang);
+          await get().loadVersions();
           await get().loadLanguages();
-          await get().load(targetCode); // force-load the freshly written doc
+          await get().load(versionId, targetLang); // force-load the new doc
           set((d) => {
             d.aiStatus = "idle";
           });
@@ -184,41 +230,19 @@ export const useCvStore = create()(
         }
       },
 
-      markReviewed: async (code) => {
-        await api.patchLanguage(code, { reviewStatus: "reviewed" });
-        await get().loadLanguages();
-      },
-
-      removeLanguage: async (code) => {
-        await api.deleteLanguage(code);
-        const langs = await get().loadLanguages();
-        if (get().lang === code) {
-          const fallback = langs.find((l) => l.enabled !== false)?.code || "en";
-          await get().load(fallback);
+      // Remove one language's document from the current version (keeps at least
+      // one language so the version is never empty).
+      removeTranslation: async (lang) => {
+        const { versionId, versions } = get();
+        const v = versions.find((x) => x.id === versionId);
+        if ((v?.langs || []).length <= 1) return;
+        await api.deleteCvLang(versionId, lang);
+        const next = await get().loadVersions();
+        if (get().lang === lang) {
+          const cur = next.find((x) => x.id === versionId);
+          const fallback = (cur?.langs || []).find((c) => c !== lang) || (cur?.langs || [])[0];
+          if (fallback) await get().load(versionId, fallback);
         }
-      },
-
-      // --- source versions & revisions ---
-      // Save the current document as a reviewed "source" revision and mark the
-      // active language reviewed. This is the trusted baseline for translations.
-      saveSourceVersion: async (label) => {
-        const { lang, doc } = get();
-        const rev = await api.createRevision({
-          lang,
-          kind: "source",
-          label: label || "Source version",
-          doc,
-        });
-        await api.patchLanguage(lang, { reviewStatus: "reviewed" });
-        await get().loadLanguages();
-        return rev;
-      },
-
-      // Restore a revision's document into the active doc (undoable + autosaves).
-      restoreRevision: async (id) => {
-        const rev = await api.getRevision(id);
-        if (rev?.doc) get().replaceDoc(rev.doc);
-        return rev;
       },
 
       // --- path-based editing actions (path is an array, e.g. ["personalInfo","bio"]) ---
@@ -314,61 +338,22 @@ export const useCvStore = create()(
         });
       },
 
-      // --- versions ---
-      saveVersion: async (name) => {
-        const { lang, doc } = get();
-        return api.createVersion(name, lang, doc);
-      },
-      restoreVersion: async (name) => {
-        const { lang } = get();
-        const doc = await api.getVersion(name, lang);
-        get().replaceDoc(doc); // undoable
-        set((d) => {
-          d.cvSource = `data/versions/${name}.${lang}.json`;
-        });
-      },
-
       // --- AI: tailor the whole CV to a job posting ---
-      // Applies immediately (per design); a safety snapshot is saved first and
-      // the change is undoable via ⌘Z. `job` is { text } or { url }; `opts` may
-      // carry { extraContext, research }.
+      // Applies in place to the current version (per design) and is undoable via
+      // ⌘Z. To keep an untouched original, duplicate the version first. `job` is
+      // { text } or { url }; `opts` may carry { extraContext, research }.
       aiTailor: async (job, opts = {}) => {
         set((d) => {
           d.aiStatus = "tailoring";
           d.aiError = null;
         });
         try {
-          const { lang, doc, cvSource } = get();
-          // Structured safety net: snapshot the current doc as a restorable
-          // revision before applying. Don't block tailoring if it fails.
-          let backupId = null;
-          try {
-            const rev = await api.createRevision({
-              lang,
-              kind: "tailor-before",
-              label: "Before tailoring",
-              doc,
-            });
-            backupId = rev?.id || null;
-          } catch {
-            /* non-fatal */
-          }
+          const { versionId, lang, doc } = get();
+          const cvSource = `versions/${versionId}/cv.${lang}.json`;
           const tailored = await api.tailorCv(lang, doc, job, { ...opts, cvSource });
           get().replaceDoc(tailored); // undoable + autosaves to disk
-          // Record the tailored result so it appears in history.
-          try {
-            await api.createRevision({
-              lang,
-              kind: "tailor-after",
-              label: "Tailored to job",
-              doc: tailored,
-            });
-          } catch {
-            /* non-fatal */
-          }
           set((d) => {
             d.aiStatus = "idle";
-            d.lastTailorBackup = backupId;
           });
         } catch (e) {
           set((d) => {
@@ -397,8 +382,8 @@ useCvStore.subscribe((state, prev) => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
       try {
-        const { lang, doc } = useCvStore.getState();
-        await api.putCv(lang, doc);
+        const { versionId, lang, doc } = useCvStore.getState();
+        await api.putCv(versionId, lang, doc);
         useCvStore.getState().setSaveState("saved");
       } catch {
         useCvStore.getState().setSaveState("error");

@@ -98,10 +98,6 @@ export const BUILTIN_LANGUAGES = [
   {
     code: "no",
     builtin: true,
-    enabled: true,
-    reviewStatus: "reviewed",
-    sourceLang: null,
-    sourceHash: null,
     labels: {
       contact: "Kontakt",
       education: "Utdanning",
@@ -116,19 +112,11 @@ export const BUILTIN_LANGUAGES = [
   {
     code: "en",
     builtin: true,
-    enabled: true,
-    reviewStatus: "reviewed",
-    sourceLang: null,
-    sourceHash: null,
     labels: { ...DEFAULT_LABELS },
   },
   {
     code: "es",
     builtin: true,
-    enabled: true,
-    reviewStatus: "reviewed",
-    sourceLang: null,
-    sourceHash: null,
     labels: {
       contact: "Contacto",
       education: "Formación",

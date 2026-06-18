@@ -1,303 +1,254 @@
-// File-backed persistence for the CV editor: live language documents, the
-// language registry (data/languages.json), and the structured revision history
-// (data/revisions/). Kept separate from routing (server/api.js) and AI
-// (server/ai.js) so each layer stays small and testable.
-import { Low } from "lowdb";
-import { JSONFile } from "lowdb/node";
+// File-backed persistence for the CV editor. The unit of organisation is a
+// **version** (e.g. "Frontend", "Backend") — a named document the user switches
+// between. Each version is a folder under data/versions/{id}/ holding one
+// cv.{lang}.json per language translation. A small language registry
+// (data/languages.json) stores the translated UI section headings ("labels").
+//
+// Kept separate from routing (server/api.js) and AI (server/ai.js) so each
+// layer stays small and testable.
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import {
-  BUILTIN_LANGUAGES,
-  catalogEntry,
-} from "../src/i18n/languages.js";
+import { BUILTIN_LANGUAGES, catalogEntry } from "../src/i18n/languages.js";
 
 const ROOT = process.cwd();
 export const DATA_DIR = path.join(ROOT, "data");
 export const VERSIONS_DIR = path.join(DATA_DIR, "versions");
-export const REVISIONS_DIR = path.join(DATA_DIR, "revisions");
 // Seed source: the original read-only sample data shipped with the app.
 const SEED_DIR = path.join(ROOT, "public", "data");
 
+const VERSIONS_FILE = path.join(DATA_DIR, "versions.json");
 const LANGUAGES_FILE = path.join(DATA_DIR, "languages.json");
-const REVISIONS_INDEX = path.join(DATA_DIR, "revisions.json");
 
-const dbCache = new Map();
-
-export async function ensureDirs() {
-  await fs.mkdir(VERSIONS_DIR, { recursive: true });
-  await fs.mkdir(REVISIONS_DIR, { recursive: true });
+// Validate a language code against the catalog (prevents junk codes / paths).
+export function isCatalogLang(code) {
+  return Boolean(catalogEntry(code));
 }
 
-// --- stable hashing (for staleness detection) ----------------------------
-// Sort object keys so logically-equal docs hash equal regardless of key order.
-function stableStringify(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const keys = Object.keys(value).sort();
-  return `{${keys
-    .map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
-    .join(",")}}`;
+function newId() {
+  return `v${Date.now().toString(36)}${crypto.randomUUID().slice(0, 4)}`;
 }
 
-// Hash only the translatable content, so cosmetic-only changes (theme,
-// section visibility) don't mark translations stale.
-export function hashDoc(doc) {
-  if (!doc || typeof doc !== "object") return "";
-  const rest = { ...doc };
-  delete rest.theme;
-  delete rest.hiddenSections;
-  return crypto.createHash("sha1").update(stableStringify(rest)).digest("hex");
-}
+const versionDir = (id) => path.join(VERSIONS_DIR, id);
+const cvFile = (id, lang) => path.join(versionDir(id), `cv.${lang}.json`);
 
-// --- live CV documents ----------------------------------------------------
-async function readSeed(lang) {
+async function readJson(file) {
   try {
-    const raw = await fs.readFile(path.join(SEED_DIR, `data.${lang}.json`), "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {}; // no seed available -> start empty
-  }
-}
-
-// One lowdb instance per language, cached. Seeds builtin languages from
-// public/data on first run; generated languages start from whatever is written.
-export async function getDb(lang) {
-  if (dbCache.has(lang)) return dbCache.get(lang);
-  await ensureDirs();
-  const file = path.join(DATA_DIR, `cv.${lang}.json`);
-  const defaultData = await readSeed(lang);
-  const db = new Low(new JSONFile(file), defaultData);
-  await db.read();
-  if (db.data == null) db.data = defaultData;
-  await db.write();
-  dbCache.set(lang, db);
-  return db;
-}
-
-export async function readCv(lang) {
-  const db = await getDb(lang);
-  return db.data;
-}
-
-export async function writeCv(lang, doc) {
-  const db = await getDb(lang);
-  db.data = doc;
-  await db.write();
-  return db.data;
-}
-
-// True if a live document file exists for this language.
-export async function cvExists(lang) {
-  try {
-    await fs.access(path.join(DATA_DIR, `cv.${lang}.json`));
-    return true;
-  } catch {
-    // Builtins may not be materialized yet but always have a seed.
-    return BUILTIN_LANGUAGES.some((l) => l.code === lang);
-  }
-}
-
-// --- language registry ----------------------------------------------------
-async function readLanguagesFile() {
-  try {
-    const raw = await fs.readFile(LANGUAGES_FILE, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.languages)) return parsed.languages;
-  } catch {
-    /* fall through to seed */
-  }
-  return null;
-}
-
-async function writeLanguagesFile(languages) {
-  await ensureDirs();
-  await fs.writeFile(LANGUAGES_FILE, JSON.stringify({ languages }, null, 2));
-}
-
-// Load the registry, seeding builtins on first run.
-export async function getLanguages() {
-  const existing = await readLanguagesFile();
-  if (existing) return existing;
-  const seeded = BUILTIN_LANGUAGES.map((l) => ({
-    ...l,
-    createdAt: new Date().toISOString(),
-  }));
-  await writeLanguagesFile(seeded);
-  return seeded;
-}
-
-export async function getLanguage(code) {
-  const langs = await getLanguages();
-  return langs.find((l) => l.code === code) || null;
-}
-
-export function isEnabledLang(langs, code) {
-  return langs.some((l) => l.code === code && l.enabled !== false);
-}
-
-// Create or merge a language entry. Returns the saved entry.
-export async function upsertLanguage(code, patch = {}) {
-  const langs = await getLanguages();
-  const i = langs.findIndex((l) => l.code === code);
-  if (i === -1) {
-    const entry = {
-      code,
-      builtin: false,
-      enabled: true,
-      reviewStatus: "needs-review",
-      sourceLang: null,
-      sourceHash: null,
-      labels: {},
-      createdAt: new Date().toISOString(),
-      ...patch,
-    };
-    langs.push(entry);
-    await writeLanguagesFile(langs);
-    return entry;
-  }
-  langs[i] = { ...langs[i], ...patch, updatedAt: new Date().toISOString() };
-  await writeLanguagesFile(langs);
-  return langs[i];
-}
-
-export async function deleteLanguage(code) {
-  const langs = await getLanguages();
-  const entry = langs.find((l) => l.code === code);
-  if (!entry) return false;
-  if (entry.builtin) {
-    // Don't remove builtins from disk; just disable them.
-    await upsertLanguage(code, { enabled: false });
-    return true;
-  }
-  const next = langs.filter((l) => l.code !== code);
-  await writeLanguagesFile(next);
-  // Best-effort cleanup of the live doc + its revisions.
-  await fs.unlink(path.join(DATA_DIR, `cv.${code}.json`)).catch(() => {});
-  dbCache.delete(code);
-  const revs = await getRevisionsIndex();
-  for (const r of revs.filter((r) => r.lang === code)) {
-    await fs.unlink(path.join(REVISIONS_DIR, `${r.id}.json`)).catch(() => {});
-  }
-  await writeRevisionsIndex(revs.filter((r) => r.lang !== code));
-  return true;
-}
-
-// Annotate each language with a `stale` flag: true when a translation's source
-// document has changed since it was generated.
-export async function getLanguagesWithStatus() {
-  const langs = await getLanguages();
-  const hashCache = new Map();
-  const liveHash = async (lang) => {
-    if (hashCache.has(lang)) return hashCache.get(lang);
-    let h = "";
-    try {
-      h = hashDoc(await readCv(lang));
-    } catch {
-      h = "";
-    }
-    hashCache.set(lang, h);
-    return h;
-  };
-  const out = [];
-  for (const l of langs) {
-    let stale = false;
-    if (l.sourceLang && l.sourceHash) {
-      const current = await liveHash(l.sourceLang);
-      stale = Boolean(current) && current !== l.sourceHash;
-    }
-    out.push({ ...l, stale });
-  }
-  return out;
-}
-
-// --- revisions ------------------------------------------------------------
-async function getRevisionsIndex() {
-  try {
-    const raw = await fs.readFile(REVISIONS_INDEX, "utf-8");
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.revisions)) return parsed.revisions;
-  } catch {
-    /* none yet */
-  }
-  return [];
-}
-
-async function writeRevisionsIndex(revisions) {
-  await ensureDirs();
-  await fs.writeFile(REVISIONS_INDEX, JSON.stringify({ revisions }, null, 2));
-}
-
-// List revision metadata (newest first), optionally filtered by language.
-export async function listRevisions(lang) {
-  const all = await getRevisionsIndex();
-  const filtered = lang ? all.filter((r) => r.lang === lang) : all;
-  return [...filtered].sort((a, b) =>
-    String(b.createdAt).localeCompare(String(a.createdAt))
-  );
-}
-
-const REVISION_KINDS = new Set([
-  "source",
-  "translation",
-  "tailor-before",
-  "tailor-after",
-  "manual",
-]);
-
-// Persist a full document as an immutable revision + index its metadata.
-export async function createRevision({
-  lang,
-  kind = "manual",
-  label = "",
-  doc,
-  sourceLang = null,
-  sourceRevisionId = null,
-  sourceHash = null,
-  model = null,
-  note = "",
-}) {
-  await ensureDirs();
-  const id = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
-  const meta = {
-    id,
-    lang,
-    kind: REVISION_KINDS.has(kind) ? kind : "manual",
-    label,
-    sourceLang,
-    sourceRevisionId,
-    sourceHash: sourceHash ?? hashDoc(doc),
-    model,
-    note,
-    createdAt: new Date().toISOString(),
-  };
-  await fs.writeFile(
-    path.join(REVISIONS_DIR, `${id}.json`),
-    JSON.stringify({ ...meta, doc }, null, 2)
-  );
-  const index = await getRevisionsIndex();
-  index.push(meta);
-  await writeRevisionsIndex(index);
-  return meta;
-}
-
-export async function getRevision(id) {
-  try {
-    const raw = await fs.readFile(path.join(REVISIONS_DIR, `${id}.json`), "utf-8");
-    return JSON.parse(raw);
+    return JSON.parse(await fs.readFile(file, "utf-8"));
   } catch {
     return null;
   }
 }
 
-export async function deleteRevision(id) {
-  await fs.unlink(path.join(REVISIONS_DIR, `${id}.json`)).catch(() => {});
-  const index = await getRevisionsIndex();
-  await writeRevisionsIndex(index.filter((r) => r.id !== id));
+async function writeJson(file, value) {
+  await fs.writeFile(file, JSON.stringify(value, null, 2));
+}
+
+// The shipped sample CV for a language, if any (used to seed new versions).
+async function readSeed(lang) {
+  return (await readJson(path.join(SEED_DIR, `data.${lang}.json`))) || null;
+}
+
+// --- one-time setup + migration -----------------------------------------
+let readyPromise = null;
+export function ensureReady() {
+  if (!readyPromise) readyPromise = setup();
+  return readyPromise;
+}
+
+export async function ensureDirs() {
+  await fs.mkdir(VERSIONS_DIR, { recursive: true });
+}
+
+async function setup() {
+  await ensureDirs();
+  if (await readJson(VERSIONS_FILE)) return; // already on the version layout
+  await migrate();
+}
+
+// Move from the old per-language layout (data/cv.{lang}.json + flat
+// data/versions/{name}.{lang}.json snapshots) to the version-folder layout.
+// Copies (never deletes) so the originals remain as a fallback. On a fresh
+// install it just seeds a "My CV" version from the shipped sample data.
+async function migrate() {
+  const entries = [];
+
+  // 1) The live docs become the first version, "My CV".
+  const v1 = newId();
+  await fs.mkdir(versionDir(v1), { recursive: true });
+  const rootFiles = await fs.readdir(DATA_DIR).catch(() => []);
+  const liveLangs = rootFiles
+    .map((f) => f.match(/^cv\.([a-z]{2,3})\.json$/)?.[1])
+    .filter(Boolean);
+  if (liveLangs.length) {
+    for (const lang of liveLangs) {
+      const doc = await readJson(path.join(DATA_DIR, `cv.${lang}.json`));
+      if (doc) await writeJson(cvFile(v1, lang), doc);
+    }
+  } else {
+    // Fresh install: seed the builtin languages from the shipped sample.
+    for (const l of BUILTIN_LANGUAGES) {
+      const seed = await readSeed(l.code);
+      if (seed) await writeJson(cvFile(v1, l.code), seed);
+    }
+  }
+  entries.push({ id: v1, name: "My CV", createdAt: new Date().toISOString() });
+
+  // 2) Old flat named snapshots -> one version each (skip auto before-tailor).
+  const versFiles = await fs.readdir(VERSIONS_DIR, { withFileTypes: true }).catch(() => []);
+  const byName = new Map();
+  for (const ent of versFiles) {
+    if (!ent.isFile()) continue;
+    const m = ent.name.match(/^(.+)\.([a-z]{2,3})\.json$/);
+    if (!m) continue;
+    const [, name, lang] = m;
+    if (/^before-tailor-/.test(name)) continue;
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(lang);
+  }
+  for (const [name, langs] of byName) {
+    const id = newId();
+    await fs.mkdir(versionDir(id), { recursive: true });
+    for (const lang of langs) {
+      const doc = await readJson(path.join(VERSIONS_DIR, `${name}.${lang}.json`));
+      if (doc) await writeJson(cvFile(id, lang), doc);
+    }
+    entries.push({ id, name, createdAt: new Date().toISOString() });
+  }
+
+  await writeJson(VERSIONS_FILE, { versions: entries });
+
+  // 3) Language label store: keep any existing labels, else seed from builtins.
+  const existing = await readJson(LANGUAGES_FILE);
+  const source = Array.isArray(existing?.languages) ? existing.languages : BUILTIN_LANGUAGES;
+  const languages = source.map((l) => ({
+    code: l.code,
+    builtin: Boolean(l.builtin) || BUILTIN_LANGUAGES.some((b) => b.code === l.code),
+    labels: l.labels || {},
+  }));
+  await writeJson(LANGUAGES_FILE, { languages });
+}
+
+// --- versions -------------------------------------------------------------
+async function readVersions() {
+  const data = await readJson(VERSIONS_FILE);
+  return Array.isArray(data?.versions) ? data.versions : [];
+}
+
+async function writeVersions(versions) {
+  await writeJson(VERSIONS_FILE, { versions });
+}
+
+// Languages a version actually has a document for (sorted for stable display).
+export async function versionLangs(id) {
+  const files = await fs.readdir(versionDir(id)).catch(() => []);
+  return files
+    .map((f) => f.match(/^cv\.([a-z]{2,3})\.json$/)?.[1])
+    .filter(Boolean)
+    .sort();
+}
+
+// List versions with the languages each one contains.
+export async function listVersions() {
+  const versions = await readVersions();
+  const out = [];
+  for (const v of versions) {
+    out.push({ ...v, langs: await versionLangs(v.id) });
+  }
+  return out;
+}
+
+export async function getVersion(id) {
+  return (await readVersions()).find((v) => v.id === id) || null;
+}
+
+// Create a version. With `fromVersionId`, copy that version's documents;
+// otherwise seed the builtin languages from the shipped sample.
+export async function createVersion({ name, fromVersionId = null }) {
+  const id = newId();
+  await fs.mkdir(versionDir(id), { recursive: true });
+  if (fromVersionId) {
+    for (const lang of await versionLangs(fromVersionId)) {
+      const doc = await readJson(cvFile(fromVersionId, lang));
+      if (doc) await writeJson(cvFile(id, lang), doc);
+    }
+  } else {
+    for (const l of BUILTIN_LANGUAGES) {
+      const seed = await readSeed(l.code);
+      if (seed) await writeJson(cvFile(id, l.code), seed);
+    }
+  }
+  const versions = await readVersions();
+  const entry = {
+    id,
+    name: String(name || "Untitled").trim() || "Untitled",
+    createdAt: new Date().toISOString(),
+  };
+  versions.push(entry);
+  await writeVersions(versions);
+  return { ...entry, langs: await versionLangs(id) };
+}
+
+export async function renameVersion(id, name) {
+  const versions = await readVersions();
+  const v = versions.find((x) => x.id === id);
+  if (!v) return null;
+  v.name = String(name || "").trim() || v.name;
+  v.updatedAt = new Date().toISOString();
+  await writeVersions(versions);
+  return { ...v, langs: await versionLangs(id) };
+}
+
+// Delete a version (and its documents). Refuses to delete the last one so the
+// app always has something to load.
+export async function deleteVersion(id) {
+  const versions = await readVersions();
+  if (versions.length <= 1) return false;
+  if (!versions.some((v) => v.id === id)) return false;
+  await writeVersions(versions.filter((v) => v.id !== id));
+  await fs.rm(versionDir(id), { recursive: true, force: true }).catch(() => {});
   return true;
 }
 
-// Validate a target language code against the catalog (prevents junk codes).
-export function isCatalogLang(code) {
-  return Boolean(catalogEntry(code));
+// --- documents ------------------------------------------------------------
+export async function readCv(versionId, lang) {
+  return await readJson(cvFile(versionId, lang)); // null when missing -> 404
+}
+
+export async function writeCv(versionId, lang, doc) {
+  await fs.mkdir(versionDir(versionId), { recursive: true });
+  await writeJson(cvFile(versionId, lang), doc);
+  return doc;
+}
+
+export async function deleteCvLang(versionId, lang) {
+  await fs.unlink(cvFile(versionId, lang)).catch(() => {});
+  return true;
+}
+
+// --- language label store -------------------------------------------------
+export async function getLanguages() {
+  const data = await readJson(LANGUAGES_FILE);
+  if (Array.isArray(data?.languages)) return data.languages;
+  const seeded = BUILTIN_LANGUAGES.map((l) => ({
+    code: l.code,
+    builtin: true,
+    labels: l.labels || {},
+  }));
+  await writeJson(LANGUAGES_FILE, { languages: seeded });
+  return seeded;
+}
+
+// Record the translated UI section headings for a language (created on the
+// first translation into it).
+export async function upsertLanguageLabels(code, labels) {
+  const languages = await getLanguages();
+  const i = languages.findIndex((l) => l.code === code);
+  if (i === -1) {
+    languages.push({ code, builtin: false, labels: labels || {} });
+  } else {
+    languages[i] = { ...languages[i], labels: labels || languages[i].labels };
+  }
+  await writeJson(LANGUAGES_FILE, { languages });
+  return languages.find((l) => l.code === code);
 }

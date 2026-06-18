@@ -38,3 +38,5 @@ src/assets/profile.jpeg
 # Local Netlify folder
 .netlify
 .vscode/
+# Playwright MCP scratch output
+.playwright-mcp/

@@ -1,7 +1,8 @@
 // HTTP routing for the CV editor's local file API. Persistence lives in
-// server/data.js (live docs, the language registry, and revision history) and
-// AI in server/ai.js. Mounted as connect middleware by vite.config.js so
-// `npm run dev` serves the app and this API on one port (no proxy, no CORS).
+// server/data.js (versions, their per-language documents, and the language
+// label store) and AI in server/ai.js. Mounted as connect middleware by
+// vite.config.js so `npm run dev` serves the app and this API on one port
+// (no proxy, no CORS).
 import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -15,22 +16,20 @@ import {
 } from "./ai.js";
 import {
   DATA_DIR,
-  VERSIONS_DIR,
+  ensureReady,
   ensureDirs,
+  listVersions,
+  getVersion,
+  createVersion,
+  renameVersion,
+  deleteVersion,
+  versionLangs,
   readCv,
   writeCv,
+  deleteCvLang,
   getLanguages,
-  getLanguage,
-  getLanguagesWithStatus,
-  isEnabledLang,
-  upsertLanguage,
-  deleteLanguage,
+  upsertLanguageLabels,
   isCatalogLang,
-  hashDoc,
-  listRevisions,
-  createRevision,
-  getRevision,
-  deleteRevision,
 } from "./data.js";
 
 function send(res, status, body) {
@@ -53,18 +52,6 @@ function readBody(req) {
     });
     req.on("error", reject);
   });
-}
-
-// Keep version/revision names filesystem-safe.
-const safeName = (s) =>
-  String(s)
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-async function langAllowed(code) {
-  const langs = await getLanguages();
-  return isEnabledLang(langs, code);
 }
 
 const MIME_EXT = {
@@ -384,39 +371,20 @@ async function getCompanyInfo({ env, jobText }) {
   return info;
 }
 
-// Generate (or refresh) a language by translating from a source language.
-async function generateLanguage(env, { sourceLang, targetLang, overwrite }) {
-  if (!(await langAllowed(sourceLang)))
-    throw new Error("Unknown source language.");
+// Translate one version's document from a source language into a target
+// language, writing the new translation into the same version.
+async function generateLanguage(env, { versionId, sourceLang, targetLang }) {
+  if (!versionId || !(await getVersion(versionId)))
+    throw new Error("Unknown version.");
+  if (!isCatalogLang(sourceLang)) throw new Error("Unknown source language.");
   if (!isCatalogLang(targetLang))
     throw new Error("Target language is not in the catalog.");
   if (targetLang === sourceLang)
     throw new Error("Source and target languages must differ.");
 
-  // Any existing entry (enabled or disabled) requires overwrite, so we never
-  // silently clobber/re-enable a language or skip the pre-overwrite snapshot.
-  const existing = await getLanguage(targetLang);
-  if (existing && !overwrite) {
-    throw new Error(
-      `Language "${targetLang}" already exists. Pass overwrite to regenerate it.`
-    );
-  }
-
-  const sourceDoc = await readCv(sourceLang);
-
-  // Snapshot the current target before overwriting, so a regeneration is undoable.
-  if (existing && overwrite) {
-    const prev = await readCv(targetLang).catch(() => null);
-    if (prev) {
-      await createRevision({
-        lang: targetLang,
-        kind: "manual",
-        label: "Before re-translate",
-        doc: prev,
-        note: "Auto-saved before regenerating translation",
-      });
-    }
-  }
+  const sourceDoc = await readCv(versionId, sourceLang);
+  if (!sourceDoc)
+    throw new Error("This version has no document in the source language.");
 
   const { doc: translated, labels } = await translateCv({
     env,
@@ -424,57 +392,41 @@ async function generateLanguage(env, { sourceLang, targetLang, overwrite }) {
     sourceLang,
     targetLang,
   });
-
-  await writeCv(targetLang, translated);
-
-  const sourceHash = hashDoc(sourceDoc);
-  const meta = await upsertLanguage(targetLang, {
-    enabled: true,
-    labels,
-    sourceLang,
-    sourceHash,
-    reviewStatus: "needs-review",
-  });
-
-  await createRevision({
-    lang: targetLang,
-    kind: "translation",
-    label: `Translated from ${sourceLang.toUpperCase()}`,
-    doc: translated,
-    sourceLang,
-    sourceHash,
-  });
-
-  return meta;
+  await writeCv(versionId, targetLang, translated);
+  await upsertLanguageLabels(targetLang, labels);
+  return { lang: targetLang, langs: await versionLangs(versionId) };
 }
 
 export function cvApiMiddleware(env = process.env) {
   return async function (req, res, next) {
     const url = new URL(req.url, "http://localhost");
-    const parts = url.pathname.split("/").filter(Boolean); // e.g. ["api","cv","en"]
+    const parts = url.pathname.split("/").filter(Boolean); // e.g. ["api","cv","v1","en"]
     if (parts[0] !== "api") return next();
 
     try {
+      await ensureReady();
+
       // --- /api/ai/* ------------------------------------------------------
       if (parts[1] === "ai") {
         if (req.method !== "POST")
           return send(res, 405, { error: "method not allowed" });
-        // /api/ai/translate — translate a source CV into a target language.
+
+        // /api/ai/translate — translate a version's doc into a target language.
         if (parts[2] === "translate") {
-          const { sourceLang, targetLang, overwrite } = await readBody(req);
-          const meta = await generateLanguage(env, {
+          const { versionId, sourceLang, targetLang } = await readBody(req);
+          const result = await generateLanguage(env, {
+            versionId,
             sourceLang,
             targetLang,
-            overwrite,
           });
-          return send(res, 200, { ok: true, language: meta });
+          return send(res, 200, { ok: true, ...result });
         }
 
         const { doc, lang, job, tone, extraContext, research, cvSource } =
           await readBody(req);
         if (!doc || typeof doc !== "object")
           return send(res, 400, { error: "missing cv document" });
-        if (!(await langAllowed(lang)))
+        if (!isCatalogLang(lang))
           return send(res, 400, { error: "unknown language" });
         const jobText = await resolveJobText(job, env);
         const companyInfo = research
@@ -510,125 +462,63 @@ export function cvApiMiddleware(env = process.env) {
         return send(res, 404, { error: "not found" });
       }
 
-      // --- /api/languages -------------------------------------------------
-      if (parts[1] === "languages") {
-        if (!parts[2]) {
-          if (req.method === "GET") {
-            const langs = await getLanguagesWithStatus();
-            return send(res, 200, langs);
-          }
-          return send(res, 405, { error: "method not allowed" });
-        }
-        // /api/languages/:code
-        const code = parts[2];
-        if (req.method === "PATCH") {
-          const patch = await readBody(req);
-          // Whitelist what callers may change.
-          const allowed = {};
-          if (typeof patch.enabled === "boolean") allowed.enabled = patch.enabled;
-          if (typeof patch.reviewStatus === "string")
-            allowed.reviewStatus = patch.reviewStatus;
-          if (patch.labels && typeof patch.labels === "object")
-            allowed.labels = patch.labels;
-          const meta = await upsertLanguage(code, allowed);
-          return send(res, 200, meta);
-        }
-        if (req.method === "DELETE") {
-          const lang = await getLanguage(code);
-          if (lang?.builtin)
-            return send(res, 400, { error: "cannot delete a built-in language" });
-          await deleteLanguage(code);
-          return send(res, 200, { ok: true });
-        }
-        return send(res, 405, { error: "method not allowed" });
-      }
-
-      // --- /api/revisions -------------------------------------------------
-      if (parts[1] === "revisions") {
-        await ensureDirs();
-        if (!parts[2]) {
-          if (req.method === "GET") {
-            const lang = url.searchParams.get("lang") || undefined;
-            return send(res, 200, await listRevisions(lang));
-          }
-          if (req.method === "POST") {
-            const { lang, kind, label, doc, note } = await readBody(req);
-            if (!(await langAllowed(lang)))
-              return send(res, 400, { error: "unknown language" });
-            if (!doc || typeof doc !== "object")
-              return send(res, 400, { error: "missing cv document" });
-            const meta = await createRevision({ lang, kind, label, doc, note });
-            return send(res, 200, meta);
-          }
-          return send(res, 405, { error: "method not allowed" });
-        }
-        // /api/revisions/:id
-        const id = safeName(parts[2]);
-        if (req.method === "GET") {
-          const rev = await getRevision(id);
-          if (!rev) return send(res, 404, { error: "not found" });
-          return send(res, 200, rev);
-        }
-        if (req.method === "DELETE") {
-          await deleteRevision(id);
-          return send(res, 200, { ok: true });
-        }
-        return send(res, 405, { error: "method not allowed" });
-      }
-
-      // --- /api/cv/:lang --------------------------------------------------
-      if (parts[1] === "cv" && parts[2]) {
-        const lang = parts[2];
-        if (!(await langAllowed(lang)))
-          return send(res, 400, { error: "unknown language" });
-        if (req.method === "GET") return send(res, 200, await readCv(lang));
-        if (req.method === "PUT") {
-          await writeCv(lang, await readBody(req));
-          return send(res, 200, { ok: true });
-        }
-        return send(res, 405, { error: "method not allowed" });
-      }
-
-      // --- /api/versions (legacy named snapshots) -------------------------
+      // --- /api/versions --------------------------------------------------
       if (parts[1] === "versions") {
-        await ensureDirs();
-        if (!parts[2] && req.method === "GET") {
-          const files = await fs.readdir(VERSIONS_DIR).catch(() => []);
-          const versions = files
-            .filter((f) => f.endsWith(".json"))
-            .map((f) => {
-              const m = f.match(/^(.*)\.([a-z]{2,3})\.json$/);
-              return m ? { name: m[1], lang: m[2], file: f } : null;
-            })
-            .filter(Boolean);
-          return send(res, 200, versions);
-        }
-        if (!parts[2] && req.method === "POST") {
-          const { name, lang, doc } = await readBody(req);
-          const clean = safeName(name);
-          if (!clean) return send(res, 400, { error: "invalid name" });
-          if (!(await langAllowed(lang)))
-            return send(res, 400, { error: "unknown language" });
-          const file = path.join(VERSIONS_DIR, `${clean}.${lang}.json`);
-          await fs.writeFile(file, JSON.stringify(doc, null, 2));
-          return send(res, 200, { ok: true, name: clean, lang });
-        }
-        if (parts[2] && parts[3]) {
-          const clean = safeName(parts[2]);
-          if (!clean) return send(res, 400, { error: "invalid name" });
-          const lang = parts[3];
-          if (!(await langAllowed(lang)))
-            return send(res, 400, { error: "unknown language" });
-          const file = path.join(VERSIONS_DIR, `${clean}.${lang}.json`);
-          if (req.method === "GET") {
-            const raw = await fs.readFile(file, "utf-8");
-            return send(res, 200, JSON.parse(raw));
+        if (!parts[2]) {
+          if (req.method === "GET") return send(res, 200, await listVersions());
+          if (req.method === "POST") {
+            const { name, fromVersionId } = await readBody(req);
+            const v = await createVersion({ name, fromVersionId });
+            return send(res, 200, v);
           }
-          if (req.method === "DELETE") {
-            await fs.unlink(file).catch(() => {});
-            return send(res, 200, { ok: true });
-          }
+          return send(res, 405, { error: "method not allowed" });
         }
+        // /api/versions/:id
+        const id = parts[2];
+        if (req.method === "PATCH") {
+          const { name } = await readBody(req);
+          const v = await renameVersion(id, name);
+          if (!v) return send(res, 404, { error: "not found" });
+          return send(res, 200, v);
+        }
+        if (req.method === "DELETE") {
+          const ok = await deleteVersion(id);
+          if (!ok)
+            return send(res, 400, {
+              error: "cannot delete (unknown, or the last remaining version)",
+            });
+          return send(res, 200, { ok: true });
+        }
+        return send(res, 405, { error: "method not allowed" });
+      }
+
+      // --- /api/cv/:versionId/:lang ---------------------------------------
+      if (parts[1] === "cv" && parts[2] && parts[3]) {
+        const versionId = parts[2];
+        const lang = parts[3];
+        if (!isCatalogLang(lang))
+          return send(res, 400, { error: "unknown language" });
+        if (!(await getVersion(versionId)))
+          return send(res, 404, { error: "unknown version" });
+        if (req.method === "GET") {
+          const doc = await readCv(versionId, lang);
+          if (!doc) return send(res, 404, { error: "no document for this language" });
+          return send(res, 200, doc);
+        }
+        if (req.method === "PUT") {
+          await writeCv(versionId, lang, await readBody(req));
+          return send(res, 200, { ok: true });
+        }
+        if (req.method === "DELETE") {
+          await deleteCvLang(versionId, lang);
+          return send(res, 200, { ok: true });
+        }
+        return send(res, 405, { error: "method not allowed" });
+      }
+
+      // --- /api/languages (label store: translated UI section headings) ---
+      if (parts[1] === "languages" && !parts[2]) {
+        if (req.method === "GET") return send(res, 200, await getLanguages());
         return send(res, 405, { error: "method not allowed" });
       }
 

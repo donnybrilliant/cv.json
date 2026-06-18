@@ -35,13 +35,11 @@ export default function JobTailor() {
 
   const lang = useCvStore((s) => s.lang);
   const doc = useCvStore((s) => s.doc);
-  const cvSource = useCvStore((s) => s.cvSource);
+  const versionId = useCvStore((s) => s.versionId);
   const aiTailor = useCvStore((s) => s.aiTailor);
   const aiStatus = useCvStore((s) => s.aiStatus);
   const aiError = useCvStore((s) => s.aiError);
   const clearAiState = useCvStore((s) => s.clearAiState);
-  const restoreRevision = useCvStore((s) => s.restoreRevision);
-  const lastTailorBackup = useCvStore((s) => s.lastTailorBackup);
 
   const tailoring = aiStatus === "tailoring";
   const busy = tailoring || writing;
@@ -96,7 +94,7 @@ export default function JobTailor() {
         lang,
         doc,
         job(),
-        { tone, extraContext, research, cvSource: cvSource || `data/cv.${lang}.json` },
+        { tone, extraContext, research, cvSource: `versions/${versionId}/cv.${lang}.json` },
         setLetter,
       );
     } catch (e) {
@@ -245,6 +243,11 @@ export default function JobTailor() {
                 />
               </div>
 
+              <p className="text-xs text-gray-400">
+                Tailoring rewrites this version in place. To keep an untouched
+                original, duplicate the version first (Versions → Duplicate).
+              </p>
+
               <div className="flex flex-col gap-2">
                 <button
                   onClick={onTailor}
@@ -268,23 +271,11 @@ export default function JobTailor() {
                 <div className="space-y-2 text-sm text-green-700 bg-green-50 rounded px-3 py-2">
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 shrink-0" />
-                    CV tailored and saved. A restore point was saved first.
+                    CV tailored and saved.
                   </div>
                   <div className="text-xs text-green-800/80">
-                    Press ⌘Z (Ctrl+Z) to undo, or restore the previous version
-                    from Languages → History at any time.
+                    Press ⌘Z (Ctrl+Z) to undo.
                   </div>
-                  {lastTailorBackup && (
-                    <button
-                      onClick={async () => {
-                        await restoreRevision(lastTailorBackup);
-                        setTailored(false);
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-white text-gray-700 ring-1 ring-gray-300 hover:bg-gray-50 cursor-pointer"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Restore previous version
-                    </button>
-                  )}
                 </div>
               )}
 

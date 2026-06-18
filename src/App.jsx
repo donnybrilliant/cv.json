@@ -83,22 +83,25 @@ export default function App() {
   const lang = useCvStore((s) => s.lang);
   const languages = useCvStore((s) => s.languages);
   const load = useCvStore((s) => s.load);
+  const loadVersions = useCvStore((s) => s.loadVersions);
   const loadLanguages = useCvStore((s) => s.loadLanguages);
 
-  // Initial load: fetch the language registry first, then the default doc
-  // (the first enabled language, preferring the previous "no" default).
+  // Initial load: fetch the version list + language labels, then open the first
+  // version (preferring the previous "no" default for its language).
   useEffect(() => {
     (async () => {
       try {
-        const langs = await loadLanguages();
-        const enabled = langs.filter((l) => l.enabled !== false).map((l) => l.code);
-        const initial = enabled.includes("no") ? "no" : enabled[0] || "no";
-        await load(initial);
+        const [versions] = await Promise.all([loadVersions(), loadLanguages()]);
+        const v = versions[0];
+        if (v) {
+          const initial = v.langs.includes("no") ? "no" : v.langs[0] || "en";
+          await load(v.id, initial);
+        }
       } catch (e) {
         console.error("Failed to load CV:", e);
       }
     })();
-  }, [load, loadLanguages]);
+  }, [load, loadVersions, loadLanguages]);
 
   if (!doc) {
     return (

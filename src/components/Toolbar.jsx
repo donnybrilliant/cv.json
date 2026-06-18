@@ -6,25 +6,21 @@ import {
   Eye,
   Undo2,
   Redo2,
-  Save,
-  History,
   Download,
   Upload,
-  RotateCcw,
-  Trash2,
-  Check,
   Loader2,
+  Check,
   FileDown,
   Palette,
   Plus,
 } from "lucide-react";
 import { useCvStore } from "../store/cvStore";
-import * as api from "../api/client";
 import { CUSTOM_THEME, THEMES, THEME_KEYS, isLightColor, themeIconColor } from "../themes";
 import { nativeName } from "../i18n/languages";
 import { exportNodeToPdf } from "../lib/exportPdf";
 import JobTailor from "./JobTailor";
 import LanguageManager from "./LanguageManager";
+import VersionSwitcher from "./VersionSwitcher";
 
 // Per-CV color theme picker (edit mode only).
 function ThemePicker() {
@@ -119,103 +115,21 @@ function SaveIndicator() {
   return null;
 }
 
-function VersionsMenu() {
-  const [open, setOpen] = useState(false);
-  const [versions, setVersions] = useState([]);
-  const lang = useCvStore((s) => s.lang);
-  const restoreVersion = useCvStore((s) => s.restoreVersion);
-  const ref = useRef(null);
-
-  const refresh = async () => {
-    const all = await api.listVersions();
-    setVersions(all.filter((v) => v.lang === lang));
-  };
-
-  // Load the version list whenever the menu opens (or language changes).
-  useEffect(() => {
-    if (!open) return;
-    let active = true;
-    api.listVersions().then((all) => {
-      if (active) setVersions(all.filter((v) => v.lang === lang));
-    });
-    return () => {
-      active = false;
-    };
-  }, [open, lang]);
-
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 px-3 py-2 text-sm rounded bg-white text-gray-700 shadow hover:bg-gray-50 cursor-pointer"
-        title="Saved versions"
-      >
-        <History className="w-4 h-4" /> Versions
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl ring-1 ring-gray-200 p-2 z-50">
-          <div className="px-2 py-1 text-xs font-semibold text-gray-400 uppercase">
-            {lang.toUpperCase()} versions
-          </div>
-          {versions.length === 0 && (
-            <div className="px-2 py-3 text-sm text-gray-400">No saved versions yet.</div>
-          )}
-          {versions.map((v) => (
-            <div
-              key={v.file}
-              className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-gray-50"
-            >
-              <span className="text-sm truncate">{v.name}</span>
-              <div className="flex gap-1 shrink-0">
-                <button
-                  className="p-1 rounded text-gray-500 hover:text-blue-700 cursor-pointer"
-                  title="Restore"
-                  onClick={async () => {
-                    await restoreVersion(v.name);
-                    setOpen(false);
-                  }}
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </button>
-                <button
-                  className="p-1 rounded text-gray-500 hover:text-red-600 cursor-pointer"
-                  title="Delete"
-                  onClick={async () => {
-                    await api.deleteVersion(v.name, v.lang);
-                    refresh();
-                  }}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Toolbar({ labels }) {
   const lang = useCvStore((s) => s.lang);
   const setLang = useCvStore((s) => s.setLang);
-  const languages = useCvStore((s) => s.languages);
+  const versions = useCvStore((s) => s.versions);
+  const versionId = useCvStore((s) => s.versionId);
   const editMode = useCvStore((s) => s.editMode);
   const toggleEdit = useCvStore((s) => s.toggleEdit);
-  const saveVersion = useCvStore((s) => s.saveVersion);
   const replaceDoc = useCvStore((s) => s.replaceDoc);
   const setEditMode = useCvStore((s) => s.setEditMode);
   const doc = useCvStore((s) => s.doc);
   const [exporting, setExporting] = useState(false);
   const [maskPdfExport, setMaskPdfExport] = useState(false);
+
+  const currentVersion = versions.find((v) => v.id === versionId);
+  const versionLangs = currentVersion?.langs || [];
 
   const { undo, redo, pastStates, futureStates } = useStore(
     useCvStore.temporal,
@@ -300,11 +214,6 @@ export default function Toolbar({ labels }) {
     }
   };
 
-  const onSaveVersion = async () => {
-    const name = prompt("Name this version (e.g. frontend-role-2026):");
-    if (name && name.trim()) await saveVersion(name.trim());
-  };
-
   const iconBtn =
     "p-2 rounded bg-white text-gray-700 shadow hover:bg-gray-50 disabled:opacity-30 disabled:cursor-default cursor-pointer";
 
@@ -323,6 +232,14 @@ export default function Toolbar({ labels }) {
       </div>
     )}
     <div className="fixed top-4 right-4 left-4 flex flex-wrap items-center justify-end gap-2 print:hidden z-40">
+      {/* What you're editing (keeps the version + language obvious) */}
+      <span className="mr-auto text-xs text-gray-500 bg-white/70 rounded px-2 py-1 shadow-sm">
+        Editing:{" "}
+        <span className="font-medium text-gray-700">
+          {currentVersion?.name || "—"} · {nativeName(lang)}
+        </span>
+      </span>
+
       {/* Left side: edit-only controls. These appear/disappear here so the
           static group on the right (toggle, languages, print) never moves. */}
       {editMode && (
@@ -337,12 +254,6 @@ export default function Toolbar({ labels }) {
               <Redo2 className="w-4 h-4" />
             </button>
           </div>
-
-          <button onClick={onSaveVersion} className="flex items-center gap-1 px-3 py-2 text-sm rounded bg-white text-gray-700 shadow hover:bg-gray-50 cursor-pointer" title="Save current as a named version">
-            <Save className="w-4 h-4" /> Save version
-          </button>
-
-          <VersionsMenu />
 
           <LanguageManager />
 
@@ -361,6 +272,8 @@ export default function Toolbar({ labels }) {
       )}
 
       {/* Static group (always in the same place, both modes) */}
+      <VersionSwitcher />
+
       {/* Edit / View toggle */}
       <button
         onClick={toggleEdit}
@@ -373,43 +286,26 @@ export default function Toolbar({ labels }) {
         {editMode ? "View" : "Edit"}
       </button>
 
-      {/* Language switch (dynamic; a dot flags drafts needing review or stale
-          translations whose source has since changed) */}
-      <div className="flex rounded shadow overflow-hidden">
-        {languages
-          .filter((l) => l.enabled !== false)
-          .map((l) => {
-            const flag = l.stale || l.reviewStatus === "needs-review";
-            return (
-              <button
-                key={l.code}
-                onClick={() => setLang(l.code)}
-                className={`relative px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                  lang === l.code
-                    ? "bg-blue-600 text-white"
-                    : "bg-blue-500 text-white/80 hover:bg-blue-600 hover:text-white"
-                }`}
-                title={
-                  l.stale
-                    ? `${nativeName(l.code)} — source changed, consider refreshing`
-                    : l.reviewStatus === "needs-review"
-                      ? `${nativeName(l.code)} — needs review`
-                      : nativeName(l.code)
-                }
-                aria-current={lang === l.code ? "true" : undefined}
-              >
-                {l.code.toUpperCase()}
-                {flag && (
-                  <span
-                    className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${
-                      l.stale ? "bg-amber-300" : "bg-white"
-                    }`}
-                  />
-                )}
-              </button>
-            );
-          })}
-      </div>
+      {/* Language switch (the languages this version has been translated into) */}
+      {versionLangs.length > 0 && (
+        <div className="flex rounded shadow overflow-hidden">
+          {versionLangs.map((code) => (
+            <button
+              key={code}
+              onClick={() => setLang(code)}
+              className={`px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                lang === code
+                  ? "bg-blue-600 text-white"
+                  : "bg-blue-500 text-white/80 hover:bg-blue-600 hover:text-white"
+              }`}
+              title={nativeName(code)}
+              aria-current={lang === code ? "true" : undefined}
+            >
+              {code.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Download PDF (cropped + compressed) */}
       <button
